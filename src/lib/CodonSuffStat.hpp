@@ -117,8 +117,6 @@ class NucPathSuffStat : public SuffStat {
             codonmatrixtree, rootcodonmatrix, codonpathsuffstatnodearray);
     }
 
-    int GetBranchIndex(int index) const { return index - 1; }
-
     void RecursiveAddSuffStat(const Tree &tree, Tree::NodeIndex from,
         const BranchSelector<MGOmegaCodonSubMatrix> &codonmatrixtree,
         const MGOmegaCodonSubMatrix &rootcodonmatrix,
@@ -126,7 +124,7 @@ class NucPathSuffStat : public SuffStat {
         if (tree.is_root(from)) {
             AddSuffStat(rootcodonmatrix, codonpathsuffstatnodearray.GetVal(from));
         } else {
-            AddSuffStat(codonmatrixtree.GetVal(GetBranchIndex(from)),
+            AddSuffStat(codonmatrixtree.GetVal(tree.branch_index(from)),
                 codonpathsuffstatnodearray.GetVal(from));
         }
         for (auto c : tree.children(from)) {
@@ -387,7 +385,7 @@ class OmegaPathSuffStatBranchArray : public SimpleBranchArray<OmegaPathSuffStat>
     //! PoissonSuffstat and OmegaPathSuffStat
     const Tree &GetTree() const /*override*/ { return tree; }
 
-    int GetNbranch() const { return GetTree().nb_nodes() - 1; }
+    int GetNbranch() const { return GetTree().nb_branches(); }
 
     //! need to re-define GetVal(), by explicitly returning a const
     //! OmegaPathSuffStat&, because of multiple inheritance
@@ -411,15 +409,14 @@ class OmegaPathSuffStatBranchArray : public SimpleBranchArray<OmegaPathSuffStat>
             GetTree().root(), codonsubmatrixarray, rootcodonsubmatrix, pathsuffstatarray);
     }
 
-    int GetBranchIndex(int index) const { return index - 1; }
-
     void RecursiveAddSuffStat(Tree::NodeIndex from,
         const BranchSelector<MGOmegaCodonSubMatrix> &codonsubmatrixarray,
         const MGOmegaCodonSubMatrix &rootcodonsubmatrix,
         const NodeSelector<PathSuffStat> &pathsuffstatarray) {
         if (!GetTree().is_root(from)) {
-            (*this)[GetBranchIndex(from)].AddSuffStat(
-                codonsubmatrixarray.GetVal(GetBranchIndex(from)), pathsuffstatarray.GetVal(from));
+            (*this)[GetTree().branch_index(from)].AddSuffStat(
+                codonsubmatrixarray.GetVal(GetTree().branch_index(from)),
+                pathsuffstatarray.GetVal(from));
         }
         for (auto c : GetTree().children(from)) {
             RecursiveAddSuffStat(c, codonsubmatrixarray, rootcodonsubmatrix, pathsuffstatarray);

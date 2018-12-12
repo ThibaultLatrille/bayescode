@@ -220,15 +220,13 @@ class PathSuffStatNodeArray : public SimpleNodeArray<PathSuffStat> {
         return ret;
     }
 
-    int GetBranchIndex(int index) const { return index - 1; }
-
     double RecursiveGetLogProb(Tree::NodeIndex from, const BranchSelector<SubMatrix> &matrixarray,
         const SubMatrix &rootmatrix) const {
         double total = 0;
         if (GetTree().is_root(from)) {
             total += GetVal(from).GetLogProb(rootmatrix);
         } else {
-            total += GetVal(from).GetLogProb(matrixarray.GetVal(GetBranchIndex(from)));
+            total += GetVal(from).GetLogProb(matrixarray.GetVal(GetTree().branch_index(from)));
         }
         for (auto c : GetTree().children(from)) {
             total += RecursiveGetLogProb(c, matrixarray, rootmatrix);

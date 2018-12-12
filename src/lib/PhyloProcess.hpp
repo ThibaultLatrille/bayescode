@@ -160,19 +160,13 @@ class PhyloProcess {
     }
 
   private:
-    int GetBranchIndex(int index) const {
-        if (index <= 0) {
-            std::cerr << "error in PhyloProcess::GetBranchIndex\n";
-            exit(1);
-        }
-        return index - 1;
-    }
-
     double GetFastLogProb() const;
     double FastSiteLogLikelihood(int site) const;
 
     //! return branch length for given branch, based on index of node at the tip of the branch
-    double GetBranchLength(int index) const { return branchlength->GetVal(GetBranchIndex(index)); }
+    double GetBranchLength(Tree::NodeIndex index) const {
+        return branchlength->GetVal(tree->branch_index(index));
+    }
 
     //! return site rate for given site (if no rates-across-sites array was given
     //! to phyloprocess, returns 1)
@@ -182,8 +176,8 @@ class PhyloProcess {
     }
 
     //! return matrix that should be used on a given branch based on index of node at branch tip
-    const SubMatrix &GetSubMatrix(int index, int site) const {
-        return submatrixarray->GetVal(GetBranchIndex(index), site);
+    const SubMatrix &GetSubMatrix(Tree::NodeIndex index, int site) const {
+        return submatrixarray->GetVal(tree->branch_index(index), site);
     }
 
     const EVector &GetRootFreq(int site) const {

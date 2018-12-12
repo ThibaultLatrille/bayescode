@@ -1,6 +1,4 @@
-
-#ifndef NODEARRAY_H
-#define NODEARRAY_H
+#pragma once
 
 #include <vector>
 #include "tree/implem.hpp"
@@ -22,10 +20,19 @@
 template <class T>
 class NodeSelector {
   public:
-    virtual ~NodeSelector() {}
+    virtual ~NodeSelector() = default;
 
     //! return the number of branches of the underlying tree
     int GetNnode() const { return GetTree().nb_nodes(); }
+
+    //! element-by-element copy (arrays should be of same size)
+    void Copy(const NodeSelector<T> &from) {
+        if (this->GetNnode() != from.GetNnode()) {
+            std::cerr << "error: node selector do not have same size\n";
+            exit(1);
+        }
+        for (int node = 0; node < this->GetNnode(); node++) { (*this)[node] = from.GetVal(node); }
+    }
 
     //! return a const reference to the underlying tree
     virtual const Tree &GetTree() const = 0;
@@ -52,8 +59,6 @@ class NodeSelector {
 template <class T>
 class NodeArray : public NodeSelector<T> {
   public:
-    virtual ~NodeArray() {}
-
     //! element-by-element copy (arrays should be of same size)
     void Copy(const NodeSelector<T> &from) {
         if (this->GetNnode() != from.GetNnode()) {
@@ -132,12 +137,11 @@ template <class T>
 class SimpleNodeArray : public NodeArray<T> {
   public:
     //! Constructor (with only the tree given as argument)
-    SimpleNodeArray(const Tree &intree) : tree(intree), array(intree.nb_nodes()) {}
+    explicit SimpleNodeArray(const Tree &intree) : tree(intree), array(intree.nb_nodes()) {}
 
     //! Constructor with tree and initializer value
     SimpleNodeArray(const Tree &intree, const T &initval)
         : tree(intree), array(intree.nb_nodes(), initval) {}
-    virtual ~SimpleNodeArray() {}
 
     const Tree &GetTree() const /*override*/ { return tree; }
     T &operator[](int index) /*override*/ { return array[index]; }
@@ -147,5 +151,3 @@ class SimpleNodeArray : public NodeArray<T> {
     const Tree &tree;
     std::vector<T> array;
 };
-
-#endif

@@ -40,7 +40,7 @@ class BranchSiteSelector {
     //! return underlying tree
     virtual const Tree &GetTree() const = 0;
     //! return number of branches of the underlying tree
-    int GetNbranch() const { return GetTree().nb_nodes() - 1; }
+    int GetNbranch() const { return GetTree().nb_branches(); }
 
     //! return number of sites
     virtual int GetSize() const = 0;

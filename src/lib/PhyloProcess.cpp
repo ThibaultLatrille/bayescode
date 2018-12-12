@@ -683,7 +683,7 @@ void PhyloProcess::RecursiveAddPathSuffStat(Tree::NodeIndex from,
     if (tree->is_root(from)) {
         LocalAddPathSuffStat(from, suffstatarray, 0);
     } else {
-        LocalAddPathSuffStat(from, suffstatarray, branchalloc.GetVal(GetBranchIndex(from)));
+        LocalAddPathSuffStat(from, suffstatarray, branchalloc.GetVal(tree->branch_index(from)));
     }
     for (auto c : tree->children(from)) { RecursiveAddPathSuffStat(c, suffstatarray, branchalloc); }
 }
@@ -764,7 +764,7 @@ void PhyloProcess::AddLengthSuffStat(
 void PhyloProcess::RecursiveAddLengthSuffStat(
     Tree::NodeIndex from, BranchArray<PoissonSuffStat> &branchlengthpathsuffstatarray) const {
     if (!tree->is_root(from)) {
-        LocalAddLengthSuffStat(from, branchlengthpathsuffstatarray[GetBranchIndex(from)]);
+        LocalAddLengthSuffStat(from, branchlengthpathsuffstatarray[tree->branch_index(from)]);
     }
     for (auto c : tree->children(from)) {
         RecursiveAddLengthSuffStat(c, branchlengthpathsuffstatarray);

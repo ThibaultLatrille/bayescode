@@ -121,7 +121,7 @@ class SingleOmegaModel : public ChainComponent {
         NHXParser parser{tree_stream};
         tree = make_from_parser(parser);
 
-        Nbranch = tree->nb_nodes() - 1;
+        Nbranch = tree->nb_branches();
 
         // Branch lengths
         blhypermean = 0.1;
@@ -538,6 +538,7 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<SingleOmegaModel> &m)
     m = std::make_unique<SingleOmegaModel>(datafile, treefile);
     Tracer tracer{*m};
     tracer.read_line(is);
+    m->Update();
     return is;
 }
 

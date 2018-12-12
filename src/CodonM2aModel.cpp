@@ -24,7 +24,7 @@ void CodonM2aModel::init() {
     NHXParser parser{tree_stream};
     tree = make_from_parser(parser);
 
-    Nbranch = tree->nb_nodes() - 1;
+    Nbranch = tree->nb_branches();
 
     Allocate();
     tracer = unique_ptr<Tracer>(new Tracer(*this));

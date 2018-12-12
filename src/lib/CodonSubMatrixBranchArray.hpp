@@ -67,5 +67,5 @@ class MGOmegaCodonSubMatrixBranchArray : public BranchArray<SubMatrix>,
     const CodonStateSpace *codonstatespace;
     const SubMatrix *nucmatrix;
     const BranchSelector<double> *omegaarray;
-    vector<MGOmegaCodonSubMatrix *> matrixarray;
+    std::vector<MGOmegaCodonSubMatrix *> matrixarray;
 };

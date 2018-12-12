@@ -21,10 +21,10 @@
 template <class T>
 class BranchSelector {
   public:
-    virtual ~BranchSelector() {}
+    virtual ~BranchSelector() = default;
 
     //! return the number of branches of the underlying tree
-    int GetNbranch() const { return GetTree().nb_nodes() - 1; }
+    int GetNbranch() const { return GetTree().nb_branches(); }
 
     //! return a const reference to the underlying tree
     virtual const Tree &GetTree() const = 0;
@@ -51,7 +51,7 @@ class BranchSelector {
 template <class T>
 class BranchArray : public BranchSelector<T> {
   public:
-    virtual ~BranchArray() {}
+    virtual ~BranchArray() = default;
 
     //! element-by-element copy (arrays should be of same size)
     void Copy(const BranchSelector<T> &from) {
@@ -132,13 +132,13 @@ template <class T>
 class SimpleBranchArray : public BranchArray<T> {
   public:
     //! Constructor (with only the tree given as argument)
-    SimpleBranchArray(const Tree &intree) : tree(intree), array(intree.nb_nodes() - 1) {}
+    explicit SimpleBranchArray(const Tree &intree) : tree(intree), array(intree.nb_branches()) {}
 
     //! Constructor with tree and initializer value
     SimpleBranchArray(const Tree &intree, const T &initval)
-        : tree(intree), array(intree.nb_nodes() - 1, initval) {}
+        : tree(intree), array(intree.nb_branches(), initval) {}
     SimpleBranchArray(const Tree &intree, const std::vector<T> &initvals)
-        : tree(intree), array(intree.nb_nodes() - 1) {
+        : tree(intree), array(intree.nb_branches()) {
         array = initvals;
     }
 

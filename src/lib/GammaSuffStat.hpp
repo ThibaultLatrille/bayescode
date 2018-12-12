@@ -71,15 +71,7 @@ class GammaSuffStat : public SuffStat {
     }
 
     //! get suff stats from a BranchIIDGamma array
-    void AddSuffStat(const BranchIIDGamma &array) {
-        for (int i = 0; i < array.GetNbranch(); i++) {
-            AddSuffStat(array.GetVal(i), log(array.GetVal(i)));
-        }
-    }
-
-    //! get suff stats from GammaWhiteNoise (!! valid only if all blmean[i]'s are
-    //! the same across all branches)
-    void AddSuffStat(const GammaWhiteNoise &array) {
+    void AddSuffStat(const SimpleBranchArray<double> &array) {
         for (int i = 0; i < array.GetNbranch(); i++) {
             AddSuffStat(array.GetVal(i), log(array.GetVal(i)));
         }

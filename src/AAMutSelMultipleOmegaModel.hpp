@@ -263,7 +263,7 @@ class AAMutSelMultipleOmegaModel : public ChainComponent {
         NHXParser parser{tree_stream};
         tree = make_from_parser(parser);
 
-        Nbranch = tree->nb_nodes() - 1;
+        Nbranch = tree->nb_branches();
 
         Allocate();
         tracer = std::unique_ptr<Tracer>(new Tracer(*this));

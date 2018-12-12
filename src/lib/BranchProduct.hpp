@@ -1,6 +1,4 @@
-
-#ifndef BRANCHPRODUCT_H
-#define BRANCHPRODUCT_H
+#pragma once
 
 #include "Array.hpp"
 #include "BranchArray.hpp"
@@ -33,7 +31,7 @@ class BranchProduct : public BranchSelector<double> {
   private:
     const BranchSelector<double> &branchval;
     double mulval;
-    mutable vector<double> array;
+    mutable std::vector<double> array;
 };
 
 /**
@@ -88,7 +86,57 @@ class BranchProductArray : public Array<BranchProduct> {
   private:
     const BranchSelector<double> &branchval;
     const Selector<double> &siteval;
-    vector<BranchProduct *> array;
+    std::vector<BranchProduct *> array;
 };
 
-#endif
+
+/**
+ * \brief The product of two BranchSelector<T>
+ *
+ * Takes two arguments: a BranchArray l_j and a second BranchArray r_j, and
+ * returns, for branch j, the product r_j * l_j.
+ *
+ * Used in DatedOemgaModel: the branch length (branch j), is
+ * equal to the product of Chronogram and BranchRate (time * rate)
+ */
+template <class T>
+class BranchwiseProduct : public SimpleBranchArray<T> {
+  public:
+    BranchwiseProduct(const BranchSelector<T> &infactor1, const BranchSelector<T> &infactor2)
+        : SimpleBranchArray<T>(infactor1.GetTree()), factor1(infactor1), factor2(infactor2) {
+        assert(factor1.GetNbranch() == factor2.GetNbranch());
+        this->Update();
+    }
+
+    //! global update of the branch array
+    void Update() {
+        for (Tree::BranchIndex branch = 0; branch < this->GetNbranch(); branch++) {
+            UpdateBranch(branch);
+        }
+    }
+
+    //! local update (around a node) of the branch array
+    //! Update the branch upstream (parent) and all branches downstream (children)
+    void UpdateLocal(Tree::NodeIndex node) {
+        // update all branch lengths around this node
+
+        // for all children
+        for (auto &child_node : this->GetTree().children(node)) {
+            UpdateBranch(this->GetTree().branch_index(child_node));
+        }
+
+        if (!this->GetTree().is_root(node)) {
+            // for the branch attached to the node
+            UpdateBranch(this->GetTree().branch_index(node));
+        }
+    }
+
+    //! branch update (at a specific branch) of the branch array
+    void UpdateBranch(Tree::BranchIndex branch) {
+        (*this)[branch] = factor1.GetVal(branch) * factor2.GetVal(branch);
+    }
+
+  private:
+    const BranchSelector<T> &factor1;
+    const BranchSelector<T> &factor2;
+};

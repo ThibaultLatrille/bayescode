@@ -60,6 +60,10 @@ set(BASE_LIBS
 add_executable(globom "src/SingleOmega.cpp")
 target_link_libraries(globom ${BASE_LIBS})
 
+# Single omega chronogram (chrono)
+add_executable(dated "src/DatedBranchOmega.cpp")
+target_link_libraries(dated bayescode_lib tree_lib)
+
 # Read single omega (readglobom)
 add_executable(readglobom "src/ReadSingleOmega.cpp")
 target_link_libraries(readglobom ${BASE_LIBS})

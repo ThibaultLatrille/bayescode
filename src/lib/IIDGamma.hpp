@@ -11,7 +11,7 @@
  */
 
 class IIDGamma : public SimpleArray<double> {
-  public:
+public:
     //! constructor specifies array size and initial shape and scale parameters
     IIDGamma(int insize, const double &inmean, const double &ininvshape)
         : SimpleArray<double>(insize), mean(inmean), invshape(ininvshape) {
@@ -63,7 +63,7 @@ class IIDGamma : public SimpleArray<double> {
     //! summarized by S have been produced by a process of rate (*this)[i], for
     //! i=0..GetSize()-1
     void GetAllocPostProb(const PoissonSuffStat &suffstat, const std::vector<double> &weight,
-        std::vector<double> &postprob) const {
+                          std::vector<double> &postprob) const {
         double max = 0;
         for (int i = 0; i < GetSize(); i++) {
             double tmp = suffstat.GetLogProb(GetVal(i));
