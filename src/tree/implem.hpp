@@ -32,6 +32,7 @@ class DoubleVectorTree : public Tree {
     bool is_leaf(NodeIndex i) const final { return children_.at(i).size() == 0; }
     int nb_branches() const final { return nb_nodes() - 1; }
     BranchIndex branch_index(NodeIndex i) const final { return i - 1; }
+    NodeIndex node_index(BranchIndex i) const final { return i + 1; }
 };
 
 std::vector<int> taxa_index_from_parser(TreeParser& parser, const std::vector<std::string>& taxa);

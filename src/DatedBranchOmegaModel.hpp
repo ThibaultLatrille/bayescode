@@ -9,8 +9,9 @@
 #include "GammaSuffStat.hpp"
 #include "IIDGamma.hpp"
 #include "Move.hpp"
-#include "NodeProcess.hpp"
+#include "NodeMultivariateProcess.hpp"
 #include "PhyloProcess.hpp"
+#include "ScatterSuffStat.hpp"
 #include "components/ChainComponent.hpp"
 #include "components/Tracer.hpp"
 
@@ -43,20 +44,24 @@ class DatedBranchOmegaModel : public ChainComponent {
     // Chronogram (diff between node ages)
     Chronogram *chronogram;
 
+    int dimension;
+    int cov_df;
+    double cov_kappa;
+    // Covariance matrix
+    CovMatrix *cov_matrix;
+    EVector *root_multivariate;
+    NodeMultivariateProcess *node_multivariate;
+
     // Branch rates (brownian process)
-    double ratesprocesssigma2;
-    double ratesprocessroot;
-    NodeProcess *nodeprocessrates;
-    BranchProcess *branchprocessrates;
+    NodeProcess *noderates;
+    BranchProcess *branchrates;
 
     // Branch lengths (product of branch rates and chronogram)
     BranchwiseProduct<double> *branchlength;
 
     // Branch omega (brownian process)
-    double omegaprocesssigma2;
-    double omegaprocessroot;
-    NodeProcess *nodeprocessomega;
-    BranchProcess *branchprocessomega;
+    NodeProcess *nodeomega;
+    BranchProcess *branchomega;
 
     // Nucleotide rates
     std::vector<double> nucrelratehypercenter;
@@ -84,12 +89,14 @@ class DatedBranchOmegaModel : public ChainComponent {
     NucPathSuffStat nucpathsuffstat;
 
     // or, alternatively, collected as a simple Poisson suff stat, as a function
-    // of nodeprocessomega
+    // of nodeomega
     OmegaPathSuffStatBranchArray *omegapathsuffstatarray;
 
     // Poisson suffstats for substitution histories, as a function of branch
     // lengths
     PoissonSuffStatBranchArray *lengthpathsuffstatarray;
+
+    ScatterSuffStat *scattersuffstat;
 
   public:
     friend std::ostream &operator<<(std::ostream &os, DatedBranchOmegaModel &m);
@@ -123,20 +130,25 @@ class DatedBranchOmegaModel : public ChainComponent {
         // Chronogram (diff between node ages)
         chronogram = new Chronogram(*nodeages);
 
+        dimension = 2;
+        cov_df = dimension + 1;
+        cov_kappa = 1.0;
+        root_multivariate = new EVector(dimension);
+        *root_multivariate = EVector::Constant(dimension, 0.1);
+        cov_matrix = new CovMatrix(dimension);
+
+        node_multivariate = new NodeMultivariateProcess(*chronogram, *cov_matrix, *root_multivariate);
+
         // Branch rates (brownian process)
-        ratesprocesssigma2 = 1.0;
-        ratesprocessroot = 0.1;
-        nodeprocessrates = new NodeProcess(*chronogram, ratesprocesssigma2, ratesprocessroot);
-        branchprocessrates = new BranchProcess(*nodeprocessrates);
+        noderates = new NodeProcess(*node_multivariate, 0);
+        branchrates = new BranchProcess(*noderates);
 
         // Branch lengths (product of branch rates and chronogram)
-        branchlength = new BranchwiseProduct<double>(*chronogram, *branchprocessrates);
+        branchlength = new BranchwiseProduct<double>(*chronogram, *branchrates);
 
         // Branch omega (brownian process)
-        omegaprocessroot = 0.3;
-        omegaprocesssigma2 = 1.0;
-        nodeprocessomega = new NodeProcess(*chronogram, omegaprocesssigma2, omegaprocessroot);
-        branchprocessomega = new BranchProcess(*nodeprocessomega);
+        nodeomega = new NodeProcess(*node_multivariate, 1);
+        branchomega = new BranchProcess(*nodeomega);
 
         // Nucleotide rates
         nucrelratehypercenter.assign(Nrr, 1.0 / Nrr);
@@ -152,10 +164,10 @@ class DatedBranchOmegaModel : public ChainComponent {
         nucmatrix = new GTRSubMatrix(Nnuc, nucrelrate, nucstat, true);
 
         // Codon Matrices
-        codonmatrixbrancharray = new MGOmegaCodonSubMatrixBranchArray(
-            GetCodonStateSpace(), nucmatrix, branchprocessomega);
+        codonmatrixbrancharray =
+            new MGOmegaCodonSubMatrixBranchArray(GetCodonStateSpace(), nucmatrix, branchomega);
         rootcodonmatrix = new MGOmegaCodonSubMatrix(
-            GetCodonStateSpace(), nucmatrix, nodeprocessomega->GetVal(tree->root()));
+            GetCodonStateSpace(), nucmatrix, nodeomega->GetVal(tree->root()));
 
         // PhyloProcess
         phyloprocess = new PhyloProcess(
@@ -166,6 +178,7 @@ class DatedBranchOmegaModel : public ChainComponent {
         lengthpathsuffstatarray = new PoissonSuffStatBranchArray(*tree);
         omegapathsuffstatarray = new OmegaPathSuffStatBranchArray(*tree);
         pathsuffstatarray = new PathSuffStatNodeArray(*tree);
+        scattersuffstat = new ScatterSuffStat(*tree);
     }
 
     virtual ~DatedBranchOmegaModel() = default;
@@ -176,23 +189,22 @@ class DatedBranchOmegaModel : public ChainComponent {
     void declare_model(C &t) {
         t.add("nucstat", nucstat);
         t.add("nucrelrate", nucrelrate);
-        //t.add("nodeages", *nodeages);
-        //t.add("nodeprocessrates", *nodeprocessrates);
-        //t.add("nodeprocessomega", *nodeprocessomega);
-        t.add("ratesprocessroot", ratesprocessroot);
-        t.add("ratesprocesssigma2", ratesprocesssigma2);
-        t.add("omegaprocessroot", omegaprocessroot);
-        t.add("omegaprocesssigma2", omegaprocesssigma2);
+        // t.add("nodeages", *nodeages);
+        // t.add("covmatrix", *cov_matrix);
+        // t.add("root_multivariate", root_multivariate);
+        // t.add("node_multivariate", node_multivariate);
+        t.add("cov_kappa", cov_kappa);
+        t.add("cov_df", cov_df);
     }
 
     template <class C>
     void declare_stats(C &t) {
         t.add("logprior", this, &DatedBranchOmegaModel::GetLogPrior);
         t.add("lnL", this, &DatedBranchOmegaModel::GetLogLikelihood);
-        t.add("bomegamean", [&]() { return branchprocessomega->GetMean(); });
-        t.add("bratesmean", [&]() { return branchprocessomega->GetVar(); });
-        t.add("bratesmean", [&]() { return branchprocessrates->GetMean(); });
-        t.add("bratesvar", [&]() { return branchprocessrates->GetVar(); });
+        t.add("bomegamean", [&]() { return branchomega->GetMean(); });
+        t.add("bratesmean", [&]() { return branchomega->GetVar(); });
+        t.add("bratesmean", [&]() { return branchrates->GetMean(); });
+        t.add("bratesvar", [&]() { return branchrates->GetVar(); });
         t.add("statent", [&]() { return Random::GetEntropy(nucstat); });
         t.add("rrent", [&]() { return Random::GetEntropy(nucrelrate); });
     }
@@ -225,7 +237,7 @@ class DatedBranchOmegaModel : public ChainComponent {
     //! whichever component is requested later on upon demand.
     void TouchCodonMatrix() {
         codonmatrixbrancharray->UpdateCodonMatrices();
-        rootcodonmatrix->SetOmega(nodeprocessomega->GetVal(tree->root()));
+        rootcodonmatrix->SetOmega(nodeomega->GetVal(tree->root()));
         rootcodonmatrix->CorruptMatrix();
     }
 
@@ -252,8 +264,8 @@ class DatedBranchOmegaModel : public ChainComponent {
     //! Used when the model is restarted or for the posterior predictif.
     void UpdateBranches() {
         chronogram->Update();
-        branchprocessomega->Update();
-        branchprocessrates->Update();
+        branchomega->Update();
+        branchrates->Update();
         branchlength->Update();
     }
 
@@ -268,19 +280,19 @@ class DatedBranchOmegaModel : public ChainComponent {
     //! \brief Update the branch rates and lengths around the focal node.
     //!
     //! Update needed when the rate (NodeProcess) of the focal node is changed.
-    void UpdateLocalBranchProcessRates(Tree::NodeIndex node) {
-        branchprocessrates->UpdateLocal(node);
+    void UpdateLocalBranchRates(Tree::NodeIndex node) {
+        branchrates->UpdateLocal(node);
         branchlength->UpdateLocal(node);
     }
 
     //! \brief Update the branch omega around the focal node.
     //!
     //! Update needed when the omega (NodeProcess) of the focal node is changed.
-    void UpdateLocalBranchProcessOmega(Tree::NodeIndex node) {
-        branchprocessomega->UpdateLocal(node);
+    void UpdateLocalBranchOmega(Tree::NodeIndex node) {
+        branchomega->UpdateLocal(node);
         if (!tree->is_root(node)) {
             Tree::BranchIndex branch = tree->branch_index(node);
-            (*codonmatrixbrancharray)[branch].SetOmega(branchprocessomega->GetVal(branch));
+            (*codonmatrixbrancharray)[branch].SetOmega(branchomega->GetVal(branch));
             (*codonmatrixbrancharray)[branch].CorruptMatrix();
         }
     }
@@ -314,10 +326,8 @@ class DatedBranchOmegaModel : public ChainComponent {
     //! Note: up to some multiplicative constant
     double GetLogPrior() const {
         double total = 0;
-        total += NodeProcessRatesLogPrior();
-        total += NodeProcessRatesHyperLogPrior();
-        total += NodeProcessOmegaLogPrior();
-        total += NodeProcessOmegaHyperLogPrior();
+        total += NodeMultivariateLogPrior();
+        total += RootMultivariateLogPrior();
         total += NucRatesLogPrior();
         return total;
     }
@@ -329,43 +339,21 @@ class DatedBranchOmegaModel : public ChainComponent {
     //! return joint log prob (log prior + log likelihood)
     double GetLogProb() const { return GetLogPrior() + GetLogLikelihood(); }
 
-    // branche rates prior
+    // Multivariate prior
 
     //! log prior over branch rates (brownian process)
-    double NodeProcessRatesLogPrior() const { return nodeprocessrates->GetLogProb(); }
+    double NodeMultivariateLogPrior() const { return node_multivariate->GetLogProb(); }
 
     //! log prior of branch rate (brownian process) around of focal node
-    double LocalNodeProcessRatesLogPrior(Tree::NodeIndex node) const {
-        return nodeprocessrates->GetLocalLogProb(node);
+    double LocalNodeMultivariateLogPrior(Tree::NodeIndex node) const {
+        return node_multivariate->GetLocalLogProb(node);
     }
+
+    //! log prior of
+    double RootMultivariateLogPrior() const { return node_multivariate->GetLogProb(tree->root()); }
 
     //! log prior of hyperparameters of branch rates (brownian process)
-    double NodeProcessRatesHyperLogPrior() const {
-        double total = 0;
-        // exponential of mean 1 on shape
-        total -= ratesprocessroot;
-        // exponential of mean 1 on rate
-        total += Random::logInverseGammaDensity(ratesprocesssigma2, 2, 1.0 / 2);
-        return total;
-    }
-
-    //! log prior over branch omega (brownian process)
-    double NodeProcessOmegaLogPrior() const { return nodeprocessomega->GetLogProb(); }
-
-    //! log prior of branch omega (brownian process) around of focal node
-    double LocalNodeProcessOmegaLogPrior(Tree::NodeIndex node) const {
-        return nodeprocessomega->GetLocalLogProb(node);
-    }
-
-    //! log prior of hyperparameters of branch omega (brownian process)
-    double NodeProcessOmegaHyperLogPrior() const {
-        double total = 0;
-        // exponential of mean 1 on shape
-        total -= omegaprocessroot;
-        // exponential of mean 1 on rate
-        total += Random::logInverseGammaDensity(omegaprocesssigma2, 2, 1.0 / 2);
-        return total;
-    }
+    double RootMultivariateHyperLogPrior() const { return -root_multivariate->sum(); }
 
     // Nucleotide rates prior
     //! log prior over nucleotide relative exchangeabilities (nucrelrate) and eq.
@@ -414,6 +402,13 @@ class DatedBranchOmegaModel : public ChainComponent {
             *codonmatrixbrancharray, *rootcodonmatrix, *pathsuffstatarray);
     }
 
+    // Scatter (brownian process)
+
+    void CollectScatterSuffStat() {
+        scattersuffstat->Clear();
+        scattersuffstat->AddSuffStat(*node_multivariate);
+    }
+
     //-------------------
     //  Log probs for MH moves
     //-------------------
@@ -422,16 +417,15 @@ class DatedBranchOmegaModel : public ChainComponent {
     //! \brief log prob to be recomputed when moving age of focal node
     double LocalNodeAgeLogProb(Tree::NodeIndex node) const {
         double tot = 0;
-        tot += LocalNodeProcessRatesLogPrior(node);
-        tot += LocalNodeProcessOmegaLogPrior(node);
+        tot += LocalNodeMultivariateLogPrior(node);
         tot += LocalBranchLengthSuffStatLogProb(node);
         return tot;
     }
 
     //! \brief log prob to be recomputed when moving branch rates (brownian process) around of focal
     //! node
-    double LocalNodeProcessRatesLogProb(Tree::NodeIndex node) const {
-        return LocalNodeProcessRatesLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+    double LocalNodeRatesLogProb(Tree::NodeIndex node) const {
+        return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
     }
 
     //! \brief log prob factor (without prior) to be recomputed when moving age of focal node, or
@@ -458,21 +452,21 @@ class DatedBranchOmegaModel : public ChainComponent {
 
     // Omega
     //! \brief log prob to be recomputed when moving omega (brownian process) around of focal node
-    double LocalNodeProcessOmegaLogProb(Tree::NodeIndex node) const {
-        return LocalNodeProcessOmegaLogPrior(node) + LocalNodeProcessOmegaSuffStatLogProb(node);
+    double LocalNodeOmegaLogProb(Tree::NodeIndex node) const {
+        return LocalNodeMultivariateLogPrior(node) + LocalNodeOmegaSuffStatLogProb(node);
     }
 
     //! \brief log prob factor (without prior) to be recomputed when moving omega (brownian process)
     //! around of focal node
-    double LocalNodeProcessOmegaSuffStatLogProb(Tree::NodeIndex node) const {
+    double LocalNodeOmegaSuffStatLogProb(Tree::NodeIndex node) const {
         double tot = 0;
         // for all children
         for (auto const &child : tree->children(node)) {
-            tot += NodeProcessOmegaSuffStatLogProb(tree->branch_index(child));
+            tot += NodeOmegaSuffStatLogProb(tree->branch_index(child));
         }
         if (!tree->is_root(node)) {
             // for the branch attached to the node
-            tot += NodeProcessOmegaSuffStatLogProb(tree->branch_index(node));
+            tot += NodeOmegaSuffStatLogProb(tree->branch_index(node));
         }
         assert(tot != 0);
         return tot;
@@ -480,21 +474,19 @@ class DatedBranchOmegaModel : public ChainComponent {
 
     //! \brief return log prob of current substitution mapping (on focal branch), as a function of
     //! omega of a given branch
-    double NodeProcessOmegaSuffStatLogProb(Tree::BranchIndex branch) const {
-        return omegapathsuffstatarray->GetVal(branch).GetLogProb(
-            branchprocessomega->GetVal(branch));
+    double NodeOmegaSuffStatLogProb(Tree::BranchIndex branch) const {
+        return omegapathsuffstatarray->GetVal(branch).GetLogProb(branchomega->GetVal(branch));
     }
 
-
-    //! \brief log prob factor to be recomputed when moving branch rates (brownian process)
-    //! hyperparams
-    double NodeProcessRatesHyperLogProb() const {
-        return NodeProcessRatesHyperLogPrior() + NodeProcessRatesLogPrior();
+    //! Covariance Matrix log prob (log prior of the cov matrix + log prob of the nodeprocesses
+    //! given the cov matrix
+    double CovMatrixLogProb() const {
+        return scattersuffstat->GetLogPosterior(*cov_matrix, cov_df, cov_kappa);
     }
 
-    //! \brief log prob factor to be recomputed when moving omega (brownian process) hyperparams
-    double NodeProcessOmegaHyperLogProb() const {
-        return NodeProcessOmegaHyperLogPrior() + NodeProcessOmegaLogPrior();
+    //! Root log prob
+    double RootLogProb() const {
+        return RootMultivariateHyperLogPrior() + RootMultivariateLogPrior();
     }
 
     // Nucleotide rates
@@ -533,9 +525,8 @@ class DatedBranchOmegaModel : public ChainComponent {
             MoveNodeAges(1.0, 3);
             MoveNodeAges(0.1, 3);
 
-            MoveNodeProcessRates(1.0, 3);
-            MoveNodeProcessRates(0.1, 3);
-            MoveNodeProcessRatesHyperParameters();
+            MoveNodeRates(1.0, 3);
+            MoveNodeRates(0.1, 3);
 
             CollectPathSuffStat();
             CollectNucPathSuffStat();
@@ -543,12 +534,55 @@ class DatedBranchOmegaModel : public ChainComponent {
             TouchMatrices();
 
             CollectOmegaPathSuffStat();
-            MoveNodeProcessOmega(1.0, 3);
-            MoveNodeProcessOmega(0.1, 3);
-            MoveNodeProcessOmegaHyperParameters();
+            MoveNodeOmega(1.0, 3);
+            MoveNodeOmega(0.1, 3);
+
+            CollectScatterSuffStat();
+            //MoveCovMatrix(1.0, dimension * dimension);
+            //MoveCovMatrix(0.1, dimension * dimension);
+            MoveRootMultivariate(1.0, 3);
+            MoveRootMultivariate(0.1, 3);
             TouchMatrices();
         }
     }
+
+    void MoveCovMatrix(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) {
+            int i = Random::Choose(dimension);
+            int j = Random::Choose(dimension);
+            assert(i < dimension);
+            assert(0 <= i);
+            assert(j < dimension);
+            assert(0 <= j);
+            double bk = (*cov_matrix)(i, j);
+
+            double logratio = -CovMatrixLogProb();
+            double sliding = tuning * noderates->GetSigma() * (Random::Uniform() - 0.5);
+            cov_matrix->SlidingMove(i, j, sliding);
+            logratio += CovMatrixLogProb();
+
+            bool accept = (log(Random::Uniform()) < logratio);
+            if (!accept) { (*cov_matrix)(i, j) = bk; }
+        }
+    };
+
+    void MoveRootMultivariate(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) {
+            for (int dim = 0; dim < dimension; dim++) {
+                double logratio = -RootLogProb();
+
+                double loghastings = tuning * (Random::Uniform() - 0.5);
+                double hastings = exp(loghastings);
+                (*root_multivariate)(dim) = hastings * (*root_multivariate)(dim);
+
+                logratio += loghastings;
+                logratio += RootLogProb();
+
+                bool accept = (log(Random::Uniform()) < logratio);
+                if (!accept) { (*root_multivariate)(dim) = (*root_multivariate)(dim) / hastings; }
+            }
+        }
+    };
 
     //! MH moves on branch ages
     void MoveNodeAges(double tuning, int nrep) {
@@ -578,7 +612,7 @@ class DatedBranchOmegaModel : public ChainComponent {
     }
 
     //! MH moves on branch rates (brownian process)
-    void MoveNodeProcessRates(double tuning, int nrep) {
+    void MoveNodeRates(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
                 MoveNodeProcessRate(node, tuning);
@@ -588,39 +622,23 @@ class DatedBranchOmegaModel : public ChainComponent {
 
     //! MH moves on branch rates (brownian process) for a focal node
     void MoveNodeProcessRate(Tree::NodeIndex node, double tuning) {
-        double logratio = -LocalNodeProcessRatesLogProb(node);
+        double logratio = -LocalNodeRatesLogProb(node);
 
-        double m = tuning * sqrt(ratesprocesssigma2) * (Random::Uniform() - 0.5);
-        (*nodeprocessrates)[node] += m;
-        UpdateLocalBranchProcessRates(node);
+        double m = tuning * noderates->GetSigma() * (Random::Uniform() - 0.5);
+        noderates->SlidingMove(node, m);
+        UpdateLocalBranchRates(node);
 
-        logratio += LocalNodeProcessRatesLogProb(node);
+        logratio += LocalNodeRatesLogProb(node);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
-            (*nodeprocessrates)[node] -= m;
-            UpdateLocalBranchProcessRates(node);
+            noderates->SlidingMove(node, m);
+            UpdateLocalBranchRates(node);
         }
     }
 
-    //! MH moves on branch rates (brownian process) hyperparameters
-    void MoveNodeProcessRatesHyperParameters() {
-        Move::Scaling(ratesprocesssigma2, 1.0, 3,
-            &DatedBranchOmegaModel::NodeProcessRatesHyperLogProb, &DatedBranchOmegaModel::NoUpdate,
-            this);
-        Move::Scaling(ratesprocesssigma2, 0.1, 3,
-            &DatedBranchOmegaModel::NodeProcessRatesHyperLogProb, &DatedBranchOmegaModel::NoUpdate,
-            this);
-        Move::Scaling(ratesprocessroot, 1.0, 3,
-            &DatedBranchOmegaModel::NodeProcessRatesHyperLogProb, &DatedBranchOmegaModel::NoUpdate,
-            this);
-        Move::Scaling(ratesprocessroot, 0.1, 3,
-            &DatedBranchOmegaModel::NodeProcessRatesHyperLogProb, &DatedBranchOmegaModel::NoUpdate,
-            this);
-    }
-
     //! MH moves on branch omega (brownian process)
-    void MoveNodeProcessOmega(double tuning, int nrep) {
+    void MoveNodeOmega(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
                 MoveNodeOmega(node, tuning);
@@ -630,35 +648,19 @@ class DatedBranchOmegaModel : public ChainComponent {
 
     //! MH moves on branch omega (brownian process) for a focal node
     void MoveNodeOmega(Tree::NodeIndex node, double tuning) {
-        double logratio = -LocalNodeProcessOmegaLogProb(node);
+        double logratio = -LocalNodeOmegaLogProb(node);
 
-        double m = tuning * sqrt(omegaprocesssigma2) * (Random::Uniform() - 0.5);
-        (*nodeprocessomega)[node] += m;
+        double m = tuning * nodeomega->GetSigma() * (Random::Uniform() - 0.5);
+        nodeomega->SlidingMove(node, m);
 
-        UpdateLocalBranchProcessOmega(node);
-        logratio += LocalNodeProcessOmegaLogProb(node);
+        UpdateLocalBranchOmega(node);
+        logratio += LocalNodeOmegaLogProb(node);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
-            (*nodeprocessomega)[node] -= m;
-            UpdateLocalBranchProcessOmega(node);
+            nodeomega->SlidingMove(node, -m);
+            UpdateLocalBranchOmega(node);
         }
-    }
-
-    //! MH moves on branch omega (brownian process) hyperparameters
-    void MoveNodeProcessOmegaHyperParameters() {
-        Move::Scaling(omegaprocesssigma2, 1.0, 3,
-            &DatedBranchOmegaModel::NodeProcessOmegaHyperLogProb, &DatedBranchOmegaModel::NoUpdate,
-            this);
-        Move::Scaling(omegaprocesssigma2, 1.0, 3,
-            &DatedBranchOmegaModel::NodeProcessOmegaHyperLogProb, &DatedBranchOmegaModel::NoUpdate,
-            this);
-        Move::Scaling(omegaprocessroot, 1.0, 3,
-            &DatedBranchOmegaModel::NodeProcessOmegaHyperLogProb, &DatedBranchOmegaModel::NoUpdate,
-            this);
-        Move::Scaling(omegaprocessroot, 0.1, 3,
-            &DatedBranchOmegaModel::NodeProcessOmegaHyperLogProb, &DatedBranchOmegaModel::NoUpdate,
-            this);
     }
 
     // Nucleotide rates

@@ -6,6 +6,34 @@
 #include "NodeArray.hpp"
 #include "Random.hpp"
 
+class CovMatrix : public EMatrix {
+  public:
+    explicit CovMatrix(int indimensions)
+        : EMatrix(indimensions, indimensions), dimensions(indimensions) {
+        for (int row = 1; row < dimensions; row++) {
+            for (int col = 1; col < dimensions; col++) {
+                (*this)(row, col) = 0.0;
+            };
+            (*this)(row, row) = 1.0;
+        };
+    }
+
+    int GetDimensions() const {
+        return dimensions;
+    }
+
+    void SlidingMove(int i, int j, double v) {
+        if (i == j) {
+            (*this)(i, j) += v;
+            // easy to assert that sigma
+        }
+    };
+
+  protected:
+    int dimensions;
+};
+
+
 /**
  * \brief A brownian univariate NodeProcess
  *
@@ -16,45 +44,65 @@
  * The value at the node is normally distributed of mean equal to the parent node, and the variance
  * is given by the time of the branch (Chronogram) multiplied by sigma^2.
  */
-class NodeProcess : public SimpleNodeArray<double> {
+class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
   public:
-    NodeProcess(const Chronogram &inchrono, const double &insigma2, const double &inroot_mean)
-        : SimpleNodeArray<double>(inchrono.GetTree()),
+    NodeMultivariateProcess(const Chronogram &inchrono, const CovMatrix &incov_matrix,
+        const EVector &inroot_mean)
+        : SimpleNodeArray<EVector>(inchrono.GetTree()),
           chronogram(inchrono),
-          sigma2(insigma2),
+          dimensions(incov_matrix.GetDimensions()),
+          cov_matrix(incov_matrix),
           root_mean(inroot_mean) {
+        assert(root_mean.size() == dimensions);
+        for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(GetTree().nb_nodes()); node++) {
+            (*this)[node] = EVector::Zero(dimensions);
+        }
         Sample();
     }
 
     //! sample all entries from prior
     void Sample() {
-        (*this)[GetTree().root()] = root_mean * exp(sigma2 * Random::sNormal());
+        (*this)[GetTree().root()].Zero(dimensions);
+        for (int dim = 1; dim < dimensions; dim++) {
+            double test = root_mean(dim);
+            double cov =  cov_matrix(dim, dim);
+            (*this)[GetTree().root()](dim) =
+                test * exp(cov * Random::sNormal());
+        };
         SampleRecursive(GetTree().root());
     }
 
     //! sample recursively a node from prior
     void SampleRecursive(Tree::NodeIndex node) {
         for (auto const &child : GetTree().children(node)) {
-            (*this)[child] = this->GetVal(node) * exp(SigmaScaled(child) * Random::sNormal());
+            for (int dim = 0; dim < dimensions; dim++) {
+                (*this)[child](dim) =
+                    this->GetVal(node)(dim) * exp(cov_matrix(dim, dim) * Random::sNormal());
+            };
             SampleRecursive(child);
         }
     }
 
     //! variance of the pro recursively a node from prior
-    double SigmaScaled(Tree::NodeIndex node) const {
-        return sqrt(sigma2 * chronogram.GetVal(GetTree().branch_index(node)));
-    };
+    double GetSigma(int dimension) const { return sqrt(cov_matrix(dimension, dimension)); };
+
+    //! dimension
+    int GetDimensions() const { return dimensions; };
 
     //! get log prob for a given node
     double GetLogProb(Tree::NodeIndex node) const {
-        if (GetTree().is_root(node)) {
-            return Random::logNormalDensity(this->GetVal(node), root_mean, sigma2);
-        } else {
-            return Random::logNormalDensity(
-                this->GetVal(node), this->GetVal(GetTree().parent(node)), SigmaScaled(node));
-        }
+        return Random::logNormalDensity(GetContrast(node), cov_matrix);
     }
 
+    //! get contrast
+    EVector GetContrast(Tree::NodeIndex node) const {
+        if (GetTree().is_root(node)) {
+            return this->GetVal(node) - root_mean;
+        } else {
+            return (this->GetVal(node) - this->GetVal(GetTree().parent(node))) /
+                   sqrt(chronogram.GetVal(chronogram.GetTree().branch_index(node)));
+        }
+    }
 
     //! get local log prob for a given node
     double GetLocalLogProb(Tree::NodeIndex node) const {
@@ -67,16 +115,43 @@ class NodeProcess : public SimpleNodeArray<double> {
     double GetLogProb() const {
         double tot = 0;
         for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(GetTree().nb_nodes()); node++) {
-            tot += GetLogProb(node);
+            if (!GetTree().is_root(node)){
+                tot += GetLogProb(node);
+            }
         }
         return tot;
     }
 
-
   protected:
     const Chronogram &chronogram;
-    const double &sigma2;
-    const double &root_mean;
+    int dimensions;
+    const CovMatrix &cov_matrix;
+    const EVector &root_mean;
+};
+
+class NodeProcess {
+  public:
+    NodeProcess(NodeMultivariateProcess &innode_multivariate, int indimension)
+        : dimension(indimension), node_multivariate(innode_multivariate)  {}
+
+    //! variance of the pro recursively a node from prior
+    double GetSigma() const { return node_multivariate.GetSigma(dimension); };
+
+    const Tree &GetTree() const {
+        return node_multivariate.GetTree();
+    }
+
+    double GetVal(Tree::NodeIndex node) const {
+        return node_multivariate.GetVal(node)(dimension);
+    }
+
+    void SlidingMove(Tree::NodeIndex node, double m) {
+        node_multivariate[node](dimension) += m;
+    }
+
+  protected:
+    int dimension;
+    NodeMultivariateProcess &node_multivariate;
 };
 
 /**

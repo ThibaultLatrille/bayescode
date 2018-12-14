@@ -68,7 +68,7 @@ class Random {
     static void DirichletSample(
         std::vector<double> &x, const std::vector<double> &center, double concentration = 1);
 
-    static double logNormalDensity(double x, double mean, double sigma);
+    static double logNormalDensity(EVector const &x, EMatrix const &cov_matrix);
     static double logGammaDensity(double x, double alpha, double beta);
     static double logInverseGammaDensity(double x, double alpha, double beta);
     static double logBetaDensity(double x, double alpha, double beta);

@@ -21,6 +21,7 @@ class Tree {
     // non-negligible cost
     virtual int nb_branches() const = 0;
     virtual BranchIndex branch_index(NodeIndex) const = 0;
+    virtual NodeIndex node_index(BranchIndex) const = 0;
 
     virtual ~Tree() = default;
 };
