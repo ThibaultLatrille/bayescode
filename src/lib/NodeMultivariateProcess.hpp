@@ -6,26 +6,30 @@
 #include "NodeArray.hpp"
 #include "Random.hpp"
 
-class CovMatrix : public EMatrix {
+class PrecisionMatrix : public EMatrix {
   public:
-    explicit CovMatrix(int indimensions)
+    explicit PrecisionMatrix(int indimensions)
         : EMatrix(indimensions, indimensions), dimensions(indimensions) {
-        for (int row = 1; row < dimensions; row++) {
-            for (int col = 1; col < dimensions; col++) {
-                (*this)(row, col) = 0.0;
-            };
-            (*this)(row, row) = 1.0;
+        for (int row = 0; row < dimensions; row++) {
+            for (int col = 0; col < dimensions; col++) { (*this)(row, col) = 0.0; };
+            (*this)(row, row) = 10.0;
         };
     }
 
-    int GetDimensions() const {
-        return dimensions;
-    }
+    int GetDimensions() const { return dimensions; }
 
     void SlidingMove(int i, int j, double v) {
-        if (i == j) {
-            (*this)(i, j) += v;
-            // easy to assert that sigma
+        (*this)(i, j) += v;
+        bool flag = true;
+        while (flag) {
+            Eigen::LLT<EMatrix> llt((*this));  // compute the Cholesky decomposition of A
+            if (llt.info() == Eigen::NumericalIssue) {
+                (*this)(i, j) -= v;
+                v *= -0.5;
+                (*this)(i, j) += v;
+            } else {
+                flag = false;
+            }
         }
     };
 
@@ -46,12 +50,12 @@ class CovMatrix : public EMatrix {
  */
 class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
   public:
-    NodeMultivariateProcess(const Chronogram &inchrono, const CovMatrix &incov_matrix,
+    NodeMultivariateProcess(const Chronogram &inchrono, const PrecisionMatrix &inprecision_matrix,
         const EVector &inroot_mean)
         : SimpleNodeArray<EVector>(inchrono.GetTree()),
           chronogram(inchrono),
-          dimensions(incov_matrix.GetDimensions()),
-          cov_matrix(incov_matrix),
+          dimensions(inprecision_matrix.GetDimensions()),
+          precision_matrix(inprecision_matrix),
           root_mean(inroot_mean) {
         assert(root_mean.size() == dimensions);
         for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(GetTree().nb_nodes()); node++) {
@@ -63,11 +67,9 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
     //! sample all entries from prior
     void Sample() {
         (*this)[GetTree().root()].Zero(dimensions);
-        for (int dim = 1; dim < dimensions; dim++) {
-            double test = root_mean(dim);
-            double cov =  cov_matrix(dim, dim);
+        for (int dim = 0; dim < dimensions; dim++) {
             (*this)[GetTree().root()](dim) =
-                test * exp(cov * Random::sNormal());
+                root_mean(dim) + GetSigmaScaled(GetTree().root(), dim) * Random::sNormal();
         };
         SampleRecursive(GetTree().root());
     }
@@ -77,21 +79,28 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
         for (auto const &child : GetTree().children(node)) {
             for (int dim = 0; dim < dimensions; dim++) {
                 (*this)[child](dim) =
-                    this->GetVal(node)(dim) * exp(cov_matrix(dim, dim) * Random::sNormal());
+                    this->GetVal(node)(dim) + GetSigmaScaled(child, dim) * Random::sNormal();
             };
             SampleRecursive(child);
         }
     }
 
     //! variance of the pro recursively a node from prior
-    double GetSigma(int dimension) const { return sqrt(cov_matrix(dimension, dimension)); };
+    double GetSigma(int dimension) const {
+        return sqrt(1.0 / precision_matrix(dimension, dimension));
+    };
+
+    double GetSigmaScaled(Tree::NodeIndex node, int dimension) const {
+        return GetSigma(dimension) *
+               sqrt(chronogram.GetVal(chronogram.GetTree().branch_index(node)));
+    };
 
     //! dimension
     int GetDimensions() const { return dimensions; };
 
     //! get log prob for a given node
     double GetLogProb(Tree::NodeIndex node) const {
-        return Random::logNormalDensity(GetContrast(node), cov_matrix);
+        return Random::logNormalDensity(GetContrast(node), precision_matrix);
     }
 
     //! get contrast
@@ -115,9 +124,7 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
     double GetLogProb() const {
         double tot = 0;
         for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(GetTree().nb_nodes()); node++) {
-            if (!GetTree().is_root(node)){
-                tot += GetLogProb(node);
-            }
+            if (!GetTree().is_root(node)) { tot += GetLogProb(node); }
         }
         return tot;
     }
@@ -125,29 +132,23 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
   protected:
     const Chronogram &chronogram;
     int dimensions;
-    const CovMatrix &cov_matrix;
+    const PrecisionMatrix &precision_matrix;
     const EVector &root_mean;
 };
 
 class NodeProcess {
   public:
     NodeProcess(NodeMultivariateProcess &innode_multivariate, int indimension)
-        : dimension(indimension), node_multivariate(innode_multivariate)  {}
+        : dimension(indimension), node_multivariate(innode_multivariate) {}
 
     //! variance of the pro recursively a node from prior
     double GetSigma() const { return node_multivariate.GetSigma(dimension); };
 
-    const Tree &GetTree() const {
-        return node_multivariate.GetTree();
-    }
+    const Tree &GetTree() const { return node_multivariate.GetTree(); }
 
-    double GetVal(Tree::NodeIndex node) const {
-        return node_multivariate.GetVal(node)(dimension);
-    }
+    double GetVal(Tree::NodeIndex node) const { return node_multivariate.GetVal(node)(dimension); }
 
-    void SlidingMove(Tree::NodeIndex node, double m) {
-        node_multivariate[node](dimension) += m;
-    }
+    void SlidingMove(Tree::NodeIndex node, double m) { node_multivariate[node](dimension) += m; }
 
   protected:
     int dimension;

@@ -45,10 +45,10 @@ class DatedBranchOmegaModel : public ChainComponent {
     Chronogram *chronogram;
 
     int dimension;
-    int cov_df;
-    double cov_kappa;
+    int invert_whishart_df;
+    double invert_whishart_kappa;
     // Covariance matrix
-    CovMatrix *cov_matrix;
+    PrecisionMatrix *precision_matrix;
     EVector *root_multivariate;
     NodeMultivariateProcess *node_multivariate;
 
@@ -131,13 +131,14 @@ class DatedBranchOmegaModel : public ChainComponent {
         chronogram = new Chronogram(*nodeages);
 
         dimension = 2;
-        cov_df = dimension + 1;
-        cov_kappa = 1.0;
+        invert_whishart_df = dimension + 1;
+        invert_whishart_kappa = 1.0;
         root_multivariate = new EVector(dimension);
-        *root_multivariate = EVector::Constant(dimension, 0.1);
-        cov_matrix = new CovMatrix(dimension);
+        *root_multivariate = EVector::Constant(dimension, -1.0);
+        precision_matrix = new PrecisionMatrix(dimension);
 
-        node_multivariate = new NodeMultivariateProcess(*chronogram, *cov_matrix, *root_multivariate);
+        node_multivariate =
+            new NodeMultivariateProcess(*chronogram, *precision_matrix, *root_multivariate);
 
         // Branch rates (brownian process)
         noderates = new NodeProcess(*node_multivariate, 0);
@@ -190,11 +191,11 @@ class DatedBranchOmegaModel : public ChainComponent {
         t.add("nucstat", nucstat);
         t.add("nucrelrate", nucrelrate);
         // t.add("nodeages", *nodeages);
-        // t.add("covmatrix", *cov_matrix);
+        // t.add("covmatrix", *precision_matrix);
         // t.add("root_multivariate", root_multivariate);
         // t.add("node_multivariate", node_multivariate);
-        t.add("cov_kappa", cov_kappa);
-        t.add("cov_df", cov_df);
+        t.add("invert_whishart_kappa", invert_whishart_kappa);
+        t.add("invert_whishart_df", invert_whishart_df);
     }
 
     template <class C>
@@ -480,8 +481,9 @@ class DatedBranchOmegaModel : public ChainComponent {
 
     //! Covariance Matrix log prob (log prior of the cov matrix + log prob of the nodeprocesses
     //! given the cov matrix
-    double CovMatrixLogProb() const {
-        return scattersuffstat->GetLogPosterior(*cov_matrix, cov_df, cov_kappa);
+    double PrecisionMatrixLogProb() const {
+        return scattersuffstat->GetLogPosterior(
+            *precision_matrix, invert_whishart_df, invert_whishart_kappa);
     }
 
     //! Root log prob
@@ -538,15 +540,15 @@ class DatedBranchOmegaModel : public ChainComponent {
             MoveNodeOmega(0.1, 3);
 
             CollectScatterSuffStat();
-            //MoveCovMatrix(1.0, dimension * dimension);
-            //MoveCovMatrix(0.1, dimension * dimension);
+            MovePrecisionMatrix(0.3, dimension * dimension);
+            MovePrecisionMatrix(0.03, dimension * dimension);
             MoveRootMultivariate(1.0, 3);
             MoveRootMultivariate(0.1, 3);
             TouchMatrices();
         }
     }
 
-    void MoveCovMatrix(double tuning, int nrep) {
+    void MovePrecisionMatrix(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
             int i = Random::Choose(dimension);
             int j = Random::Choose(dimension);
@@ -554,15 +556,15 @@ class DatedBranchOmegaModel : public ChainComponent {
             assert(0 <= i);
             assert(j < dimension);
             assert(0 <= j);
-            double bk = (*cov_matrix)(i, j);
+            double bk = (*precision_matrix)(i, j);
 
-            double logratio = -CovMatrixLogProb();
-            double sliding = tuning * noderates->GetSigma() * (Random::Uniform() - 0.5);
-            cov_matrix->SlidingMove(i, j, sliding);
-            logratio += CovMatrixLogProb();
+            double logratio = -PrecisionMatrixLogProb();
+            double sliding = tuning * (Random::Uniform() - 0.5);
+            precision_matrix->SlidingMove(i, j, sliding);
+            logratio += PrecisionMatrixLogProb();
 
             bool accept = (log(Random::Uniform()) < logratio);
-            if (!accept) { (*cov_matrix)(i, j) = bk; }
+            if (!accept) { (*precision_matrix)(i, j) = bk; }
         }
     };
 
@@ -595,10 +597,10 @@ class DatedBranchOmegaModel : public ChainComponent {
 
     //! MH moves on branch ages for a focal node
     void MoveNodeAge(Tree::NodeIndex node, double tuning) {
-        double bk = nodeages->GetVal(node);
         double logratio = -LocalNodeAgeLogProb(node);
-        double sliding = tuning * (Random::Uniform() - 0.5);
 
+        double bk = nodeages->GetVal(node);
+        double sliding = tuning * (Random::Uniform() - 0.5);
         nodeages->SlidingMove(node, sliding);
         UpdateLocalChronogram(node);
 
@@ -632,7 +634,7 @@ class DatedBranchOmegaModel : public ChainComponent {
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
-            noderates->SlidingMove(node, m);
+            noderates->SlidingMove(node, -m);
             UpdateLocalBranchRates(node);
         }
     }
@@ -652,8 +654,8 @@ class DatedBranchOmegaModel : public ChainComponent {
 
         double m = tuning * nodeomega->GetSigma() * (Random::Uniform() - 0.5);
         nodeomega->SlidingMove(node, m);
-
         UpdateLocalBranchOmega(node);
+
         logratio += LocalNodeOmegaLogProb(node);
 
         bool accept = (log(Random::Uniform()) < logratio);

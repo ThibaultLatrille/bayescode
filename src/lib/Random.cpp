@@ -593,9 +593,9 @@ void Random::DirichletSample(
     for (unsigned int k = 0; k < x.size(); k++) { x[k] /= tot2; }
 }
 
-double Random::logNormalDensity(EVector const &x, EMatrix const &cov_matrix) {
-    double a = x.transpose() * cov_matrix.inverse() * x;
-    return -Logroot2pi - 0.5 * log(cov_matrix.determinant()) - 0.5 * a;
+double Random::logNormalDensity(EVector const &x, EMatrix const &precision_matrix) {
+    double a = x.transpose() * precision_matrix * x;
+    return -x.size() * Logroot2pi + 0.5 * log(precision_matrix.determinant()) - 0.5 * a;
 }
 
 double Random::logBetaDensity(double x, double alpha, double beta) {

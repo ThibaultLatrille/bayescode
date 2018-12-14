@@ -26,25 +26,23 @@ class ScatterSuffStat : public SuffStat {
     }
 
     //! return log p(Y | M) as a function of the covariance matrix M
-    double GetLogProb(CovMatrix const &cov_matrix) const {
-        EMatrix inv_cov = cov_matrix.inverse();
-        double norm = cov_matrix.norm();
-        inv_cov = scattermatrix * inv_cov;
-        double trace = inv_cov.trace();
-        return -(tree.nb_branches() * log(norm) + trace) / 2;
+    double GetLogProb(PrecisionMatrix const &precision_matrix) const {
+        double det = precision_matrix.determinant();
+        EMatrix mul = scattermatrix * precision_matrix;
+        double trace = mul.trace();
+        return 0.5 * tree.nb_branches() * log(det) - 0.5 * trace;
     }
 
     //! return log p(M | Y) propto p(Y | M) p(M) as a function of the covariance matrix M
-    double GetLogPosterior(CovMatrix const &cov_matrix, int df, double kappa) const {
-        EMatrix inv_cov = cov_matrix.inverse();
-        double norm = cov_matrix.norm();
+    double GetLogPosterior(PrecisionMatrix const &precision_matrix, int df, double kappa) const {
+        double det = precision_matrix.determinant();
 
         EMatrix diag = EMatrix::Zero(dimensions, dimensions);
         for (int i{0}; i < dimensions; i++) { diag(i, i) = kappa; }
 
-        inv_cov = (diag + scattermatrix) * inv_cov;
-        double trace = inv_cov.trace();
-        return -((df + dimensions + tree.nb_branches() + 1) * log(norm) + trace) / 2;
+        EMatrix mul = (diag + scattermatrix) * precision_matrix;
+        double trace = mul.trace();
+        return 0.5 * (df + dimensions + tree.nb_branches() + 1) * log(det) - 0.5 * trace;
     }
 
   protected:
