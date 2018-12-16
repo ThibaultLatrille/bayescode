@@ -48,8 +48,9 @@ class DatedBranchOmegaModel : public ChainComponent {
     int invert_whishart_df;
     double invert_whishart_kappa;
     // Covariance matrix
-    PrecisionMatrix *precision_matrix;
-    EVector *root_multivariate;
+    EMatrix precision_matrix;
+    EMatrix cov_matrix;
+    EVector root_multivariate;
     NodeMultivariateProcess *node_multivariate;
 
     // Branch rates (brownian process)
@@ -57,7 +58,8 @@ class DatedBranchOmegaModel : public ChainComponent {
     BranchProcess *branchrates;
 
     // Branch lengths (product of branch rates and chronogram)
-    BranchwiseProduct<double> *branchlength;
+    BranchwiseProduct *branchlength;
+    BranchwiseProduct *branchscaledomega;
 
     // Branch omega (brownian process)
     NodeProcess *nodeomega;
@@ -133,23 +135,24 @@ class DatedBranchOmegaModel : public ChainComponent {
         dimension = 2;
         invert_whishart_df = dimension + 1;
         invert_whishart_kappa = 1.0;
-        root_multivariate = new EVector(dimension);
-        *root_multivariate = EVector::Constant(dimension, -1.0);
-        precision_matrix = new PrecisionMatrix(dimension);
+        root_multivariate = EVector::Constant(dimension, -1.0);
+        precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
+        cov_matrix = EMatrix::Identity(dimension, dimension) * 0.1;
 
         node_multivariate =
-            new NodeMultivariateProcess(*chronogram, *precision_matrix, *root_multivariate);
+            new NodeMultivariateProcess(*chronogram, precision_matrix, root_multivariate);
 
         // Branch rates (brownian process)
         noderates = new NodeProcess(*node_multivariate, 0);
         branchrates = new BranchProcess(*noderates);
 
         // Branch lengths (product of branch rates and chronogram)
-        branchlength = new BranchwiseProduct<double>(*chronogram, *branchrates);
+        branchlength = new BranchwiseProduct(*chronogram, *branchrates);
 
         // Branch omega (brownian process)
         nodeomega = new NodeProcess(*node_multivariate, 1);
         branchomega = new BranchProcess(*nodeomega);
+        branchscaledomega = new BranchwiseProduct(*chronogram, *branchomega);
 
         // Nucleotide rates
         nucrelratehypercenter.assign(Nrr, 1.0 / Nrr);
@@ -190,10 +193,10 @@ class DatedBranchOmegaModel : public ChainComponent {
     void declare_model(C &t) {
         t.add("nucstat", nucstat);
         t.add("nucrelrate", nucrelrate);
-        // t.add("nodeages", *nodeages);
-        // t.add("covmatrix", *precision_matrix);
-        // t.add("root_multivariate", root_multivariate);
-        // t.add("node_multivariate", node_multivariate);
+        t.add("nodeages", *nodeages);
+        t.add("node_multivariate", *node_multivariate);
+        t.add("covmatrix", precision_matrix);
+        t.add("root_multivariate", root_multivariate);
         t.add("invert_whishart_kappa", invert_whishart_kappa);
         t.add("invert_whishart_df", invert_whishart_df);
     }
@@ -202,10 +205,22 @@ class DatedBranchOmegaModel : public ChainComponent {
     void declare_stats(C &t) {
         t.add("logprior", this, &DatedBranchOmegaModel::GetLogPrior);
         t.add("lnL", this, &DatedBranchOmegaModel::GetLogLikelihood);
-        t.add("bomegamean", [&]() { return branchomega->GetMean(); });
-        t.add("bratesmean", [&]() { return branchomega->GetVar(); });
-        t.add("bratesmean", [&]() { return branchrates->GetMean(); });
-        t.add("bratesvar", [&]() { return branchrates->GetVar(); });
+        t.add("bomegamean", [&]() { return branchscaledomega->GetMean(); });
+        t.add("bomegavar", [&]() { return branchscaledomega->GetVar(); });
+        t.add("blengthmean", [&]() { return branchlength->GetMean(); });
+        t.add("blengthvar", [&]() { return branchlength->GetVar(); });
+        for (int i = 0; i < dimension; i++) {
+            // t.add("root_" + std::to_string(i), [&]() { return root_multivariate(i); });
+            for (int j = 0; j <= i; j++) {
+                // t.add("cov_" + std::to_string(i) + "_" + std::to_string(j),[&]() { return
+                // precision_matrix(i, j); });
+            }
+        }
+        t.add("cov_0_0", [&]() { return precision_matrix(0, 0); });
+        t.add("cov_1_1", [&]() { return precision_matrix(1, 1); });
+        t.add("cov_0_1", [&]() { return precision_matrix(1, 0); });
+        t.add("root_0", [&]() { return root_multivariate(0); });
+        t.add("root_1", [&]() { return root_multivariate(1); });
         t.add("statent", [&]() { return Random::GetEntropy(nucstat); });
         t.add("rrent", [&]() { return Random::GetEntropy(nucrelrate); });
     }
@@ -266,6 +281,7 @@ class DatedBranchOmegaModel : public ChainComponent {
     void UpdateBranches() {
         chronogram->Update();
         branchomega->Update();
+        branchscaledomega->Update();
         branchrates->Update();
         branchlength->Update();
     }
@@ -354,7 +370,7 @@ class DatedBranchOmegaModel : public ChainComponent {
     double RootMultivariateLogPrior() const { return node_multivariate->GetLogProb(tree->root()); }
 
     //! log prior of hyperparameters of branch rates (brownian process)
-    double RootMultivariateHyperLogPrior() const { return -root_multivariate->sum(); }
+    double RootMultivariateHyperLogPrior() const { return -root_multivariate.sum(); }
 
     // Nucleotide rates prior
     //! log prior over nucleotide relative exchangeabilities (nucrelrate) and eq.
@@ -479,13 +495,6 @@ class DatedBranchOmegaModel : public ChainComponent {
         return omegapathsuffstatarray->GetVal(branch).GetLogProb(branchomega->GetVal(branch));
     }
 
-    //! Covariance Matrix log prob (log prior of the cov matrix + log prob of the nodeprocesses
-    //! given the cov matrix
-    double PrecisionMatrixLogProb() const {
-        return scattersuffstat->GetLogPosterior(
-            *precision_matrix, invert_whishart_df, invert_whishart_kappa);
-    }
-
     //! Root log prob
     double RootLogProb() const {
         return RootMultivariateHyperLogPrior() + RootMultivariateLogPrior();
@@ -510,6 +519,8 @@ class DatedBranchOmegaModel : public ChainComponent {
     double Move() {
         ResampleSub(1.0);
         MoveParameters(30);
+        cov_matrix = precision_matrix.inverse();
+        branchscaledomega->Update();
         return 1.0;
     }
 
@@ -540,32 +551,16 @@ class DatedBranchOmegaModel : public ChainComponent {
             MoveNodeOmega(0.1, 3);
 
             CollectScatterSuffStat();
-            MovePrecisionMatrix(0.3, dimension * dimension);
-            MovePrecisionMatrix(0.03, dimension * dimension);
+            SamplePrecisionMatrix();
             MoveRootMultivariate(1.0, 3);
             MoveRootMultivariate(0.1, 3);
             TouchMatrices();
         }
     }
 
-    void MovePrecisionMatrix(double tuning, int nrep) {
-        for (int rep = 0; rep < nrep; rep++) {
-            int i = Random::Choose(dimension);
-            int j = Random::Choose(dimension);
-            assert(i < dimension);
-            assert(0 <= i);
-            assert(j < dimension);
-            assert(0 <= j);
-            double bk = (*precision_matrix)(i, j);
-
-            double logratio = -PrecisionMatrixLogProb();
-            double sliding = tuning * (Random::Uniform() - 0.5);
-            precision_matrix->SlidingMove(i, j, sliding);
-            logratio += PrecisionMatrixLogProb();
-
-            bool accept = (log(Random::Uniform()) < logratio);
-            if (!accept) { (*precision_matrix)(i, j) = bk; }
-        }
+    void SamplePrecisionMatrix() {
+        precision_matrix =
+            scattersuffstat->SamplePrecisionMatrix(invert_whishart_df, invert_whishart_kappa);
     };
 
     void MoveRootMultivariate(double tuning, int nrep) {
@@ -573,15 +568,14 @@ class DatedBranchOmegaModel : public ChainComponent {
             for (int dim = 0; dim < dimension; dim++) {
                 double logratio = -RootLogProb();
 
-                double loghastings = tuning * (Random::Uniform() - 0.5);
-                double hastings = exp(loghastings);
-                (*root_multivariate)(dim) = hastings * (*root_multivariate)(dim);
+                double m = tuning * (Random::Uniform() - 0.5);
 
-                logratio += loghastings;
+                root_multivariate(dim) += m;
+
                 logratio += RootLogProb();
 
                 bool accept = (log(Random::Uniform()) < logratio);
-                if (!accept) { (*root_multivariate)(dim) = (*root_multivariate)(dim) / hastings; }
+                if (!accept) { root_multivariate(dim) -= m; }
             }
         }
     };

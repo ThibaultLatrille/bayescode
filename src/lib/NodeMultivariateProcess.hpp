@@ -6,38 +6,6 @@
 #include "NodeArray.hpp"
 #include "Random.hpp"
 
-class PrecisionMatrix : public EMatrix {
-  public:
-    explicit PrecisionMatrix(int indimensions)
-        : EMatrix(indimensions, indimensions), dimensions(indimensions) {
-        for (int row = 0; row < dimensions; row++) {
-            for (int col = 0; col < dimensions; col++) { (*this)(row, col) = 0.0; };
-            (*this)(row, row) = 10.0;
-        };
-    }
-
-    int GetDimensions() const { return dimensions; }
-
-    void SlidingMove(int i, int j, double v) {
-        (*this)(i, j) += v;
-        bool flag = true;
-        while (flag) {
-            Eigen::LLT<EMatrix> llt((*this));  // compute the Cholesky decomposition of A
-            if (llt.info() == Eigen::NumericalIssue) {
-                (*this)(i, j) -= v;
-                v *= -0.5;
-                (*this)(i, j) += v;
-            } else {
-                flag = false;
-            }
-        }
-    };
-
-  protected:
-    int dimensions;
-};
-
-
 /**
  * \brief A brownian univariate NodeProcess
  *
@@ -50,14 +18,13 @@ class PrecisionMatrix : public EMatrix {
  */
 class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
   public:
-    NodeMultivariateProcess(const Chronogram &inchrono, const PrecisionMatrix &inprecision_matrix,
-        const EVector &inroot_mean)
+    NodeMultivariateProcess(
+        const Chronogram &inchrono, const EMatrix &inprecision_matrix, const EVector &inroot_mean)
         : SimpleNodeArray<EVector>(inchrono.GetTree()),
           chronogram(inchrono),
-          dimensions(inprecision_matrix.GetDimensions()),
+          dimensions(inroot_mean.size()),
           precision_matrix(inprecision_matrix),
           root_mean(inroot_mean) {
-        assert(root_mean.size() == dimensions);
         for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(GetTree().nb_nodes()); node++) {
             (*this)[node] = EVector::Zero(dimensions);
         }
@@ -68,8 +35,7 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
     void Sample() {
         (*this)[GetTree().root()].Zero(dimensions);
         for (int dim = 0; dim < dimensions; dim++) {
-            (*this)[GetTree().root()](dim) =
-                root_mean(dim) + GetSigmaScaled(GetTree().root(), dim) * Random::sNormal();
+            (*this)[GetTree().root()](dim) = root_mean(dim) + GetSigma(dim) * Random::sNormal();
         };
         SampleRecursive(GetTree().root());
     }
@@ -132,7 +98,7 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
   protected:
     const Chronogram &chronogram;
     int dimensions;
-    const PrecisionMatrix &precision_matrix;
+    const EMatrix &precision_matrix;
     const EVector &root_mean;
 };
 
@@ -201,24 +167,5 @@ class BranchProcess : public SimpleBranchArray<double> {
         // (nodeprocess->GetVal(parent) - nodeprocess->GetVal(node));
     }
 
-    //! get sum over the branch array
-    double GetSum() const {
-        double m1 = 0;
-        for (int i = 0; i < GetNbranch(); i++) { m1 += GetVal(i); }
-        return m1;
-    }
-
-    //! get mean over the branch array
-    double GetMean() const { return GetSum() / GetNbranch(); }
-
-    //! get variance over the branch array
-    double GetVar() const {
-        double m1 = GetMean();
-        double m2 = 0;
-        for (int i = 0; i < GetNbranch(); i++) { m2 += GetVal(i) * GetVal(i); }
-        m2 /= GetNbranch();
-        m2 -= m1 * m1;
-        return m2;
-    }
     const NodeProcess &nodeprocess;
 };

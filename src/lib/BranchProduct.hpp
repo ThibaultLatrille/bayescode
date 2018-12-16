@@ -91,7 +91,7 @@ class BranchProductArray : public Array<BranchProduct> {
 
 
 /**
- * \brief The product of two BranchSelector<T>
+ * \brief The product of two BranchSelector<double>
  *
  * Takes two arguments: a BranchArray l_j and a second BranchArray r_j, and
  * returns, for branch j, the product r_j * l_j.
@@ -99,11 +99,11 @@ class BranchProductArray : public Array<BranchProduct> {
  * Used in DatedOemgaModel: the branch length (branch j), is
  * equal to the product of Chronogram and BranchRate (time * rate)
  */
-template <class T>
-class BranchwiseProduct : public SimpleBranchArray<T> {
+class BranchwiseProduct : public SimpleBranchArray<double> {
   public:
-    BranchwiseProduct(const BranchSelector<T> &infactor1, const BranchSelector<T> &infactor2)
-        : SimpleBranchArray<T>(infactor1.GetTree()), factor1(infactor1), factor2(infactor2) {
+    BranchwiseProduct(
+        const BranchSelector<double> &infactor1, const BranchSelector<double> &infactor2)
+        : SimpleBranchArray<double>(infactor1.GetTree()), factor1(infactor1), factor2(infactor2) {
         assert(factor1.GetNbranch() == factor2.GetNbranch());
         this->Update();
     }
@@ -136,7 +136,27 @@ class BranchwiseProduct : public SimpleBranchArray<T> {
         (*this)[branch] = factor1.GetVal(branch) * factor2.GetVal(branch);
     }
 
+    //! get sum over the branch array
+    double GetSum() const {
+        double m1 = 0;
+        for (int i = 0; i < GetNbranch(); i++) { m1 += GetVal(i); }
+        return m1;
+    }
+
+    //! get mean over the branch array
+    double GetMean() const { return GetSum() / GetNbranch(); }
+
+    //! get variance over the branch array
+    double GetVar() const {
+        double m1 = GetMean();
+        double m2 = 0;
+        for (int i = 0; i < GetNbranch(); i++) { m2 += GetVal(i) * GetVal(i); }
+        m2 /= GetNbranch();
+        m2 -= m1 * m1;
+        return m2;
+    }
+
   private:
-    const BranchSelector<T> &factor1;
-    const BranchSelector<T> &factor2;
+    const BranchSelector<double> &factor1;
+    const BranchSelector<double> &factor2;
 };

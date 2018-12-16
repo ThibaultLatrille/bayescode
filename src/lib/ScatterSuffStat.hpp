@@ -25,24 +25,25 @@ class ScatterSuffStat : public SuffStat {
         }
     }
 
-    //! return log p(Y | M) as a function of the covariance matrix M
-    double GetLogProb(PrecisionMatrix const &precision_matrix) const {
-        double det = precision_matrix.determinant();
-        EMatrix mul = scattermatrix * precision_matrix;
-        double trace = mul.trace();
-        return 0.5 * tree.nb_branches() * log(det) - 0.5 * trace;
-    }
+    EMatrix SamplePrecisionMatrix(int df, double kappa) const {
+        EMatrix sampling_matrix = EMatrix::Zero(dimensions, dimensions);
 
-    //! return log p(M | Y) propto p(Y | M) p(M) as a function of the covariance matrix M
-    double GetLogPosterior(PrecisionMatrix const &precision_matrix, int df, double kappa) const {
-        double det = precision_matrix.determinant();
+        EMatrix prior_matrix = EMatrix::Identity(dimensions, dimensions) * kappa;
+        EMatrix precision_matrix = (prior_matrix + scattermatrix).inverse();
 
-        EMatrix diag = EMatrix::Zero(dimensions, dimensions);
-        for (int i{0}; i < dimensions; i++) { diag(i, i) = kappa; }
+        Eigen::SelfAdjointEigenSolver<EMatrix> eigen_solver(precision_matrix);
+        EMatrix transform =
+            eigen_solver.eigenvectors() * eigen_solver.eigenvalues().cwiseSqrt().asDiagonal();
+        EVector sampled_vector = EVector::Zero(dimensions);
 
-        EMatrix mul = (diag + scattermatrix) * precision_matrix;
-        double trace = mul.trace();
-        return 0.5 * (df + dimensions + tree.nb_branches() + 1) * log(det) - 0.5 * trace;
+        int nbr_samples = df + tree.nb_branches();
+        for (int i = 0; i < nbr_samples; i++) {
+            for (int dim = 0; dim < dimensions; dim++) { sampled_vector(dim) = Random::sNormal(); }
+            sampled_vector = transform * sampled_vector;
+            sampling_matrix += sampled_vector * sampled_vector.transpose();
+        }
+
+        return sampling_matrix;
     }
 
   protected:
