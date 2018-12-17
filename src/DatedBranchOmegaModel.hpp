@@ -49,7 +49,6 @@ class DatedBranchOmegaModel : public ChainComponent {
     double invert_whishart_kappa;
     // Covariance matrix
     EMatrix precision_matrix;
-    EMatrix cov_matrix;
     EVector root_multivariate;
     NodeMultivariateProcess *node_multivariate;
 
@@ -137,7 +136,6 @@ class DatedBranchOmegaModel : public ChainComponent {
         invert_whishart_kappa = 1.0;
         root_multivariate = EVector::Constant(dimension, -1.0);
         precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
-        cov_matrix = EMatrix::Identity(dimension, dimension) * 0.1;
 
         node_multivariate =
             new NodeMultivariateProcess(*chronogram, precision_matrix, root_multivariate);
@@ -210,17 +208,12 @@ class DatedBranchOmegaModel : public ChainComponent {
         t.add("blengthmean", [&]() { return branchlength->GetMean(); });
         t.add("blengthvar", [&]() { return branchlength->GetVar(); });
         for (int i = 0; i < dimension; i++) {
-            // t.add("root_" + std::to_string(i), [&]() { return root_multivariate(i); });
+            t.add("root_" + std::to_string(i), root_multivariate.coeffRef(i));
             for (int j = 0; j <= i; j++) {
-                // t.add("cov_" + std::to_string(i) + "_" + std::to_string(j),[&]() { return
-                // precision_matrix(i, j); });
+                t.add("cov_" + std::to_string(i) + "_" + std::to_string(j),
+                    precision_matrix.coeffRef(i, j));
             }
         }
-        t.add("cov_0_0", [&]() { return precision_matrix(0, 0); });
-        t.add("cov_1_1", [&]() { return precision_matrix(1, 1); });
-        t.add("cov_0_1", [&]() { return precision_matrix(1, 0); });
-        t.add("root_0", [&]() { return root_multivariate(0); });
-        t.add("root_1", [&]() { return root_multivariate(1); });
         t.add("statent", [&]() { return Random::GetEntropy(nucstat); });
         t.add("rrent", [&]() { return Random::GetEntropy(nucrelrate); });
     }
@@ -519,7 +512,6 @@ class DatedBranchOmegaModel : public ChainComponent {
     double Move() {
         ResampleSub(1.0);
         MoveParameters(30);
-        cov_matrix = precision_matrix.inverse();
         branchscaledomega->Update();
         return 1.0;
     }
@@ -559,8 +551,8 @@ class DatedBranchOmegaModel : public ChainComponent {
     }
 
     void SamplePrecisionMatrix() {
-        precision_matrix =
-            scattersuffstat->SamplePrecisionMatrix(invert_whishart_df, invert_whishart_kappa);
+        scattersuffstat->SamplePrecisionMatrix(
+            precision_matrix, invert_whishart_df, invert_whishart_kappa);
     };
 
     void MoveRootMultivariate(double tuning, int nrep) {

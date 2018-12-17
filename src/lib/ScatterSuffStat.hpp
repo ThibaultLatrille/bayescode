@@ -25,8 +25,8 @@ class ScatterSuffStat : public SuffStat {
         }
     }
 
-    EMatrix SamplePrecisionMatrix(int df, double kappa) const {
-        EMatrix sampling_matrix = EMatrix::Zero(dimensions, dimensions);
+    void SamplePrecisionMatrix(EMatrix &sampling_matrix, int df, double kappa) const {
+        sampling_matrix.setZero();
 
         EMatrix prior_matrix = EMatrix::Identity(dimensions, dimensions) * kappa;
         EMatrix precision_matrix = (prior_matrix + scattermatrix).inverse();
@@ -42,8 +42,6 @@ class ScatterSuffStat : public SuffStat {
             sampled_vector = transform * sampled_vector;
             sampling_matrix += sampled_vector * sampled_vector.transpose();
         }
-
-        return sampling_matrix;
     }
 
   protected:
