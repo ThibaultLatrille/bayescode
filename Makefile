@@ -97,9 +97,11 @@ run-app-tests: all
 	_build/readmutselomega _test/mutselomega_gal4
 	@echo "\n\e[35m\e[1m== Diffsel double sparse ====================================================\e[0m"
 	@make --no-print-directory diffseldsparse
-
-# @make --no-print-directory run-multigeneglobom-test
-
+	@make --no-print-directory run-multigeneglobom-test
+	@echo "\n\e[35m\e[1m== Dated MutSel run =========================================================\e[0m"
+	_build/datedmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/datedmutsel_gal4
+	@echo "\n\e[35m\e[1m== Dated MutSel restart =====================================================\e[0m"
+	_build/datedmutsel _test/datedmutsel_gal4
 
 .PHONY: run-multigeneglobom-test
 run-multigeneglobom-test: all
@@ -137,11 +139,13 @@ mutselomega: _build
 
 .PHONY: dated
 dated: _build
-	@cd _build ; make --no-print-directory -j8 dated
+	@cd _build ; make --no-print-directory -j8 dated datedmutsel
 	@rm -rf _dated
 	@mkdir _dated
 	_build/dated -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/gal4
 	_build/dated _dated/gal4
+	_build/datedmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/gal4
+	_build/datedmutsel _dated/gal4
 
 .PHONY: diffseldsparse
 diffseldsparse: all

@@ -64,6 +64,9 @@ target_link_libraries(globom ${BASE_LIBS})
 add_executable(dated "src/DatedBranchOmega.cpp")
 target_link_libraries(dated bayescode_lib tree_lib)
 
+add_executable(datedmutsel "src/DatedMutSel.cpp")
+target_link_libraries(datedmutsel bayescode_lib tree_lib)
+
 # Read single omega (readglobom)
 add_executable(readglobom "src/ReadSingleOmega.cpp")
 target_link_libraries(readglobom ${BASE_LIBS})

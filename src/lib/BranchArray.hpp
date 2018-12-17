@@ -148,6 +148,8 @@ class SimpleBranchArray : public BranchArray<T> {
     T &operator[](int index) /*override*/ { return array[index]; }
     const T &GetVal(int index) const /*override*/ { return array[index]; }
 
+    long occupancy(int cond) const { return std::count(array.begin(), array.end(), cond); };
+
     size_t size() const { return array.size(); }
 
     SimpleBranchArray<T> &operator=(const SimpleBranchArray<T> &from) {

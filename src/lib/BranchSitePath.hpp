@@ -1,5 +1,4 @@
-#ifndef SITEPATH_H
-#define SITEPATH_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -8,6 +7,7 @@ class SuffStat;
 class PoissonSuffStat;
 class PathSuffStat;
 class PolySuffStat;
+class PathSuffStatBidimArray;
 class SubMatrix;
 
 /**
@@ -241,5 +241,3 @@ inline int BranchSitePath::GetNsub() const { return nsub; }
 
 inline int BranchSitePath::GetInitState() const { return init->GetState(); }
 inline int BranchSitePath::GetFinalState() const { return last->GetState(); }
-
-#endif  // SITEPATH_H

@@ -1,6 +1,4 @@
-
-#ifndef PATHSUFFSTAT_H
-#define PATHSUFFSTAT_H
+#pragma once
 
 #include <map>
 #include "Array.hpp"
@@ -262,6 +260,16 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
         process.AddPathSuffStat(*this, branchalloc);
     }
 
+    //! \brief add suffstatarray given as argument to this array based on the allocations provided
+    //! as the second argument (mixture models)
+    void Add(const BidimSelector<PathSuffStat> &suffstatarray, const Selector<int> &alloc) {
+        for (int row = 0; row < this->GetNrow(); row++) {
+            for (int col = 0; col < this->GetNcol(); col++) {
+                (*this)(row, alloc.GetVal(col)) += suffstatarray.GetVal(row, col);
+            }
+        }
+    }
+
     //! return total log prob (summed over all items), given a bi-dimensional
     //! array of rate matrices
     double GetLogProb(const BidimSelector<SubMatrix> &matrixarray) const {
@@ -289,6 +297,5 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
         }
         return total;
     }
-};
 
-#endif
+};

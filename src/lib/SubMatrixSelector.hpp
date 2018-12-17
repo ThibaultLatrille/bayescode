@@ -1,9 +1,8 @@
-
-#ifndef MATRIXSELECTOR_H
-#define MATRIXSELECTOR_H
+#pragma once
 
 #include "Array.hpp"
 #include "BidimArray.hpp"
+#include "BranchSiteSelector.hpp"
 #include "SubMatrix.hpp"
 
 /**
@@ -64,4 +63,3 @@ class RootSubMatrixSelector : public Selector<SubMatrix> {
     const BidimSelector<SubMatrix> &matrixbidimarray;
 };
 
-#endif

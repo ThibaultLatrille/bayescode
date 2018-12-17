@@ -41,11 +41,12 @@ class AAMutSelOmegaCodonSubMatrix : public virtual NucCodonSubMatrix,
 
     double GetPredictedDNDS() const;
 
-  protected:
     void SetNe(double inNe) {
         Ne = inNe;
         CorruptMatrix();
     }
+
+  protected:
 
     void ComputeArray(int i) const override;
     void ComputeStationary() const override;
