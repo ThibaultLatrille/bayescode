@@ -28,12 +28,12 @@ int main(int argc, char *argv[]) {
     ChainCmdLine cmd{argc, argv, "DatedMutSel", ' ', "0.1"};
 
     ChainDriver *chain_driver = nullptr;
-    DatedMutSelModel *model = nullptr;
+    unique_ptr<DatedMutSelModel> model = nullptr;
 
     if (cmd.resume_from_checkpoint()) {
         std::ifstream is = cmd.checkpoint_file();
         chain_driver = new ChainDriver(is);
-        model = new DatedMutSelModel(is);
+        is >> model;
         check_restart(*model, cmd.chain_name() + ".trace");
     } else {
         InferenceAppArgParse args(cmd);
@@ -41,9 +41,10 @@ int main(int argc, char *argv[]) {
         cmd.parse();
         chain_driver =
             new ChainDriver(cmd.chain_name(), args.every.getValue(), args.until.getValue());
-        model = new DatedMutSelModel(args.alignment.getValue(), args.treefile.getValue(),
+        model = unique_ptr<DatedMutSelModel>(new DatedMutSelModel(args.alignment.getValue(), args.treefile.getValue(),
             aamutsel_args.ncat.getValue(), aamutsel_args.basencat.getValue(),
-            aamutsel_args.condition_aware.getValue(), aamutsel_args.polymorphism_aware.getValue());
+            aamutsel_args.condition_aware.getValue(), aamutsel_args.polymorphism_aware.getValue()));
+        model->Update();
     }
 
     ConsoleLogger console_logger;

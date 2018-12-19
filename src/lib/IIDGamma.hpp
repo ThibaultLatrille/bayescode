@@ -24,7 +24,7 @@ public:
     double GetShape() const { return 1.0 / invshape; }
 
     //! return scale parameter
-    double GetScale() const { return 1.0 / invshape / mean; }
+    double GetScale() const { return (1.0 / invshape) / mean; }
 
     //! sample all entries, given current shape and scale params
     void Sample() {

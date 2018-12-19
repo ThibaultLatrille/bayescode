@@ -28,9 +28,9 @@ int main(int argc, char *argv[]) {
             new ChainDriver(cmd.chain_name(), args.every.getValue(), args.until.getValue());
         model = unique_ptr<DatedBranchOmegaModel>(
             new DatedBranchOmegaModel(args.alignment.getValue(), args.treefile.getValue()));
+        model->Update();
     }
 
-    model->Update();
     ConsoleLogger console_logger;
     ChainCheckpoint chain_checkpoint(cmd.chain_name() + ".param", *chain_driver, *model);
     StandardTracer trace(*model, cmd.chain_name());

@@ -74,7 +74,6 @@ class DatedMutSelModel : public ChainComponent {
     bool condition_aware;
     bool polymorphism_aware;
 
-    std::unique_ptr<Tracer> tracer;
     std::unique_ptr<const Tree> tree;
 
     FileSequenceAlignment *data;
@@ -109,7 +108,6 @@ class DatedMutSelModel : public ChainComponent {
     // distributions
 
     int baseNcat;
-    int basemin;
     double basekappa;
     StickBreakingProcess *baseweight;
     OccupancySuffStat *baseoccupancy;
@@ -172,6 +170,8 @@ class DatedMutSelModel : public ChainComponent {
     PolySuffStatArray *componentpolysuffstatarray{nullptr};
 
   public:
+    friend std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m);
+
     //-------------------
     // Construction and allocation
     // ------------------
@@ -197,13 +197,6 @@ class DatedMutSelModel : public ChainComponent {
           polymorphism_aware(inpolymorphism_aware),
           baseNcat(inbaseNcat),
           Ncat(inNcat) {
-        init();
-        Update();
-    }
-
-    virtual ~DatedMutSelModel() = default;
-
-    void init() {
         data = new FileSequenceAlignment(datafile);
         codondata = new CodonSequenceAlignment(data, true);
 
@@ -215,16 +208,6 @@ class DatedMutSelModel : public ChainComponent {
         if (Ncat <= 0) { Ncat = Nsite; }
         if (Ncat > Nsite) { Ncat = Nsite; }
         if (Ncat > 100) { Ncat = 100; }
-
-        basemin = 0;
-        if (baseNcat < 0) {
-            basemin = 1;
-            baseNcat = -baseNcat;
-            if (baseNcat != 2) {
-                std::cerr << "error in basencat\n";
-                exit(1);
-            }
-        }
 
         std::cerr << "-- Number of sites: " << Nsite << std::endl;
         std::cerr << "ncat : " << Ncat << '\n';
@@ -251,60 +234,6 @@ class DatedMutSelModel : public ChainComponent {
 
         branchalloc = new SimpleBranchArray<int>(*tree, branch_cond);
 
-        Allocate();
-        tracer = std::unique_ptr<Tracer>(new Tracer(*this, &DatedMutSelModel::declare_model));
-    }
-
-    void move(int it) override { Move(); }
-
-    template <class C>
-    void declare_model(C &t) {
-        t.add("branchlength", blhypermean);
-        t.add("branchlength", blhyperinvshape);
-        t.add("branchlength", *branchlength);
-        t.add("nucrelrate", nucrelrate);
-        t.add("nucstat", nucstat);
-        t.add("basekappa", basekappa);
-        t.add("baseweight", *baseweight);
-        t.add("componentalloc", *componentalloc);
-        t.add("*basecenterarray", *basecenterarray);
-        t.add("*baseconcentrationarray", *baseconcentrationarray);
-        t.add("kappa", kappa);
-        t.add("weight", *weight);
-        t.add("componentaafitnessarray", *componentaafitnessarray);
-        t.add("sitealloc", *sitealloc);
-        t.add("condition_ne", condition_ne);
-        if (polyprocess != nullptr) { t.add("theta; ", theta); }
-    }
-
-    template <class C>
-    void declare_stats(C &t) {
-        t.add("logprior", [this]() { return GetLogPrior(); });
-        t.add("lnL", [this]() { return GetLogLikelihood(); });
-        // 3x: per coding site (and not per nucleotide site)
-        t.add("length", [this]() { return 3 * branchlength->GetTotalLength(); });
-        t.add("predicted_dnds", [this]() { return GetPredictedDNDS(); });
-        if (polyprocess != nullptr) { t.add("theta", theta); }
-        t.add("ncluster", [this]() { return GetNcluster(); });
-        t.add("kappa", kappa);
-        if (baseNcat > 1) {
-            if (basemin) {
-                t.add("basencluster", [this]() { return GetBaseNcluster(); });
-                t.add("baseweight1", [this]() { return baseweight->GetVal(1); });
-            } else {
-                t.add("basencluster", [this]() { return GetBaseNcluster(); });
-                t.add("basekappa", basekappa);
-            }
-        }
-        t.add("aaent", [this]() { return GetMeanAAEntropy(); });
-        t.add("meanaaconc", [this]() { return GetMeanComponentAAConcentration(); });
-        t.add("aacenterent", [this]() { return GetMeanComponentAAEntropy(); });
-        t.add("statent", [&]() { return Random::GetEntropy(nucstat); });
-        t.add("rrent", [&]() { return Random::GetEntropy(nucrelrate); });
-    }
-
-    //! allocate the model (data structures)
-    void Allocate() {
         // branch lengths
         blhypermean = 0.1;
         blhyperinvshape = 1.0;
@@ -332,19 +261,15 @@ class DatedMutSelModel : public ChainComponent {
 
         basecenterhypercenter.assign(Naa, 1.0 / Naa);
         basecenterhyperinvconc = 1.0 / Naa;
-
         basecenterarray =
-            new IIDDirichlet(baseNcat, basecenterhypercenter, 1.0 / basecenterhyperinvconc);
+            new IIDDirichlet(baseNcat, basecenterhypercenter, basecenterhyperinvconc);
         basecenterarray->SetUniform();
 
         baseconchypermean = Naa;
         baseconchyperinvshape = 1.0;
-        double alpha = 1.0 / baseconchyperinvshape;
-        double beta = alpha / baseconchypermean;
-
-        baseconcentrationarray = new IIDGamma(baseNcat, alpha, beta);
+        baseconcentrationarray = new IIDGamma(baseNcat, baseconchypermean, baseconchyperinvshape);
         for (int k = 0; k < baseNcat; k++) { (*baseconcentrationarray)[k] = 20.0; }
-        if (basemin == 1) { (*baseconcentrationarray)[0] = 1.0; }
+
         // suff stats for component aa fitness arrays
         basesuffstatarray = new DirichletSuffStatArray(baseNcat, Naa);
         componentalloc = new MultinomialAllocationVector(Ncat, baseweight->GetArray());
@@ -412,6 +337,51 @@ class DatedMutSelModel : public ChainComponent {
 
         sitepathsuffstatarray = new PathSuffStatBidimArray(Ncond, Nsite);
         componentpathsuffstatarray = new PathSuffStatBidimArray(Ncond, Ncat);
+    }
+
+    virtual ~DatedMutSelModel() = default;
+
+    void move(int it) override { Move(); }
+
+    template <class C>
+    void declare_model(C &t) {
+        t.add("branchlength", blhypermean);
+        t.add("branchlength", blhyperinvshape);
+        t.add("branchlength", *branchlength);
+        t.add("nucrelrate", nucrelrate);
+        t.add("nucstat", nucstat);
+        t.add("basekappa", basekappa);
+        t.add("baseweight", *baseweight);
+        t.add("componentalloc", *componentalloc);
+        t.add("*basecenterarray", *basecenterarray);
+        t.add("*baseconcentrationarray", *baseconcentrationarray);
+        t.add("kappa", kappa);
+        t.add("weight", *weight);
+        t.add("componentaafitnessarray", *componentaafitnessarray);
+        t.add("sitealloc", *sitealloc);
+        t.add("condition_ne", condition_ne);
+        if (polyprocess != nullptr) { t.add("theta; ", theta); }
+    }
+
+    template <class C>
+    void declare_stats(C &t) {
+        t.add("logprior", [this]() { return GetLogPrior(); });
+        t.add("lnL", [this]() { return GetLogLikelihood(); });
+        // 3x: per coding site (and not per nucleotide site)
+        t.add("length", [this]() { return 3 * branchlength->GetTotalLength(); });
+        t.add("predicted_dnds", [this]() { return GetPredictedDNDS(); });
+        if (polyprocess != nullptr) { t.add("theta", theta); }
+        t.add("ncluster", [this]() { return GetNcluster(); });
+        t.add("kappa", kappa);
+        if (baseNcat > 1) {
+            t.add("basencluster", [this]() { return GetBaseNcluster(); });
+            t.add("basekappa", basekappa);
+        }
+        t.add("aaent", [this]() { return GetMeanAAEntropy(); });
+        t.add("meanaaconc", [this]() { return GetMeanComponentAAConcentration(); });
+        t.add("aacenterent", [this]() { return GetMeanComponentAAEntropy(); });
+        t.add("statent", [&]() { return Random::GetEntropy(nucstat); });
+        t.add("rrent", [&]() { return Random::GetEntropy(nucrelrate); });
     }
 
     //-------------------
@@ -485,6 +455,7 @@ class DatedMutSelModel : public ChainComponent {
         double total = 0;
         total += BranchLengthsLogPrior();
         total += NucRatesLogPrior();
+
         if (baseNcat > 1) {
             total += BaseStickBreakingHyperLogPrior();
             total += BaseStickBreakingLogPrior();
@@ -493,6 +464,7 @@ class DatedMutSelModel : public ChainComponent {
         total += StickBreakingHyperLogPrior();
         total += StickBreakingLogPrior();
         total += AALogPrior();
+
         if (polyprocess != nullptr) { total += ThetaLogPrior(); }
         return total;
     }
@@ -983,7 +955,7 @@ class DatedMutSelModel : public ChainComponent {
             MoveBaseComponents(10);
             ResampleBaseEmptyComponents();
             if (baseNcat > 1) {
-                if (!basemin) { BaseLabelSwitchingMove(); }
+                BaseLabelSwitchingMove();
                 ResampleBaseWeights();
                 MoveBaseKappa();
             }
@@ -1041,7 +1013,7 @@ class DatedMutSelModel : public ChainComponent {
     double MoveBaseConcentrations(double tuning) {
         double nacc = 0;
         double ntot = 0;
-        for (int k = basemin; k < baseNcat; k++) {
+        for (int k = 0; k < baseNcat; k++) {
             if (baseoccupancy->GetVal(k)) {
                 double &c = (*baseconcentrationarray)[k];
                 double bk = c;
@@ -1067,7 +1039,6 @@ class DatedMutSelModel : public ChainComponent {
     void ResampleBaseEmptyComponents() {
         basecenterarray->PriorResample(*baseoccupancy);
         baseconcentrationarray->PriorResample(*baseoccupancy);
-        if (basemin == 1) { (*baseconcentrationarray)[0] = 1.0; }
     }
 
     //! Gibbs resample base mixture allocations
@@ -1162,7 +1133,7 @@ class DatedMutSelModel : public ChainComponent {
     double GetMeanComponentAAConcentration() const {
         double tot = 0;
         double totw = 0;
-        for (int i = basemin; i < baseNcat; i++) {
+        for (int i = 0; i < baseNcat; i++) {
             tot += baseoccupancy->GetVal(i) * baseconcentrationarray->GetVal(i);
             totw += baseoccupancy->GetVal(i);
         }
@@ -1195,27 +1166,40 @@ class DatedMutSelModel : public ChainComponent {
 
     const std::vector<double> &GetProfile(int i) const { return siteaafitnessarray->GetVal(i); }
 
-    void ToStream(std::ostream &os) const {
-        os << "DatedMutSel" << '\t';
-        os << datafile << '\t' << treefile << '\t';
-        os << Ncat << '\t' << baseNcat << '\t';
-        os << condition_aware << '\t' << polymorphism_aware << '\t';
-        tracer->write_line(os);
+    void ToStream(std::ostream &os) { os << *this; }
+};
+
+std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m) {
+    std::string model_name, datafile, treefile;
+    int Ncat, baseNcat;
+    bool condition_aware, polymorphism_aware;
+
+    is >> model_name;
+    if (model_name != "DatedMutSelModel") {
+        std::cerr << "Expected DatedMutSelModel for model name, got " << model_name << "\n";
+        exit(1);
     }
 
-    DatedMutSelModel(std::istream &is) {
-        std::string model_name;
-        is >> model_name;
-        if (model_name != "DatedMutSel") {
-            std::cerr << "Expected DatedMutSel for model name, got " << model_name << "\n";
-            exit(1);
-        }
-        is >> datafile >> treefile;
-        is >> Ncat >> baseNcat;
-        is >> condition_aware >> polymorphism_aware;
+    is >> datafile >> treefile;
+    is >> Ncat >> baseNcat;
+    is >> condition_aware >> polymorphism_aware;
+    m.reset(new DatedMutSelModel(
+        datafile, treefile, Ncat, baseNcat, condition_aware, polymorphism_aware));
+    Tracer tracer{*m, &DatedMutSelModel::declare_model};
+    tracer.read_line(is);
+    m->Update();
+    return is;
+}
 
-        init();
-        tracer->read_line(is);
-        Update();
-    };
-};
+std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m) {
+    Tracer tracer{m, &DatedMutSelModel::declare_model};
+    os << "DatedMutSelModel" << '\t';
+    os << m.datafile << '\t';
+    os << m.treefile << '\t';
+    os << m.Ncat << '\t';
+    os << m.baseNcat << '\t';
+    os << m.condition_aware << '\t';
+    os << m.polymorphism_aware << '\t';
+    tracer.write_line(os);
+    return os;
+}
