@@ -8,7 +8,7 @@
 using namespace std;
 
 PoissonRandomField::PoissonRandomField(
-    set<unsigned> sample_size_set, CodonStateSpace *instatespace, unsigned precision)
+    set<unsigned> sample_size_set, CodonStateSpace &instatespace, unsigned precision)
     : statespace{instatespace}, precision{precision} {
     grid_s_step = 20.0 / (PowUnsigned(2, precision) + 1);
 
@@ -21,8 +21,8 @@ PoissonRandomField::PoissonRandomField(
 }
 
 double PoissonRandomField::GetProb(int anc_state, int der_state, unsigned der_occurence,
-    unsigned sample_size, const vector<double> *aafitnessarray, const GTRSubMatrix *nucmatrix,
-    const double *theta) {
+    unsigned sample_size, const vector<double> &aafitnessarray, const GTRSubMatrix &nucmatrix,
+    const double &theta) {
     if (anc_state < 0 or der_state < 0) { return 0.0; }
 
     double proba_obs = 0;
@@ -31,17 +31,17 @@ double PoissonRandomField::GetProb(int anc_state, int der_state, unsigned der_oc
         // If the ancestral allele is monomorphic
 
         proba_obs = 1.0;
-        for (auto neighbor_state : statespace->GetNeighbors(anc_state)) {
+        for (auto neighbor_state : statespace.GetNeighbors(anc_state)) {
             // 0 is the special case for which it is the sum of all over 0 < i <= n
             // Nucleotide mutation rate between ancestral and derived codon
-            proba_obs -= (*theta) * InterpolateProba(anc_state, neighbor_state, 0, sample_size,
-                                        aafitnessarray, nucmatrix);
+            proba_obs -= theta * InterpolateProba(anc_state, neighbor_state, 0, sample_size,
+                                     aafitnessarray, nucmatrix);
         }
 
     } else {
         // If the ancestral allele is not monomorphic
-        proba_obs = (*theta) * InterpolateProba(anc_state, der_state, der_occurence, sample_size,
-                                   aafitnessarray, nucmatrix);
+        proba_obs = theta * InterpolateProba(anc_state, der_state, der_occurence, sample_size,
+                                aafitnessarray, nucmatrix);
     }
     assert(!std::isnan(proba_obs));
     if (proba_obs >= 0.0 and proba_obs <= 1.0) {
@@ -67,10 +67,10 @@ static struct {
 } PairLowerThan;
 
 double PoissonRandomField::InterpolateProba(int anc_state, int der_state, unsigned der_occurence,
-    unsigned sample_size, const vector<double> *aafitnessarray, const GTRSubMatrix *nucmatrix) {
+    unsigned sample_size, const vector<double> &aafitnessarray, const GTRSubMatrix &nucmatrix) {
     // Selection coefficient between ancestral and derived codon
-    double s = log(aafitnessarray->at(statespace->Translation(der_state)));
-    s -= log(aafitnessarray->at(statespace->Translation(anc_state)));
+    double s = log(aafitnessarray.at(statespace.Translation(der_state)));
+    s -= log(aafitnessarray.at(statespace.Translation(anc_state)));
 
     if (ComputedProb.at(sample_size).front().first > s or
         ComputedProb.at(sample_size).back().first < s) {
@@ -88,10 +88,10 @@ double PoissonRandomField::InterpolateProba(int anc_state, int der_state, unsign
 
     double f = p * it_up->second.at(der_occurence) + (1 - p) * it_low->second.at(der_occurence);
 
-    int pos = statespace->GetDifferingPosition(anc_state, der_state);
+    int pos = statespace.GetDifferingPosition(anc_state, der_state);
     assert(0 <= pos and pos < 3);
-    double mutation_rate = (*nucmatrix)(
-        statespace->GetCodonPosition(pos, anc_state), statespace->GetCodonPosition(pos, der_state));
+    double mutation_rate = nucmatrix(
+        statespace.GetCodonPosition(pos, anc_state), statespace.GetCodonPosition(pos, der_state));
 
     return mutation_rate * f;
 }

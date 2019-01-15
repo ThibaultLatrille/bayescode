@@ -11,37 +11,7 @@
 #include "SuffStat.hpp"
 
 /**
- * \brief A general sufficient statistic for substitution histories, as a
- * function of the substitution rate matrix.
- *
- * The probability of a set of detailed substitution histories (collectively
- * denoted as S), as a function of some rate matrix Q = (Q_ab), with equilibrium
- * frequencies pi = (pi_a), can be written as:
- *
- * p(S | Q) propto (prod_a pi_a^u_a) (prod_a exp(t_a Q_aa)) (prod_ab Q_ab^v_ab),
- *
- * where u_a is the total number of times state a was seen at the root (root
- * count statistic), v_ab (pair is the total number of substitution events from
- * a to b (pair count stat), and t_a is the total waiting time in state a
- * (waiting time stat) -- all this, across all substitution histories included
- * in S.
- *
- * PolySuffStat implements this idea, by providing methods for gathering
- * sufficient statistics across substitution histories (see also
- * BranchSitePoly::AddPolySuffStat), adding them across sites and/or branches,
- * and calculating the log p(S | Q) for any matrix Q
- *
- * These Poly suffstats can be used for any Markovian substitution process (any
- * Q). In some cases (i.e. for Muse and Gaut codon models), they can be
- * furthered simplified, as a function of the nucleotide rate parameters or the
- * omega parameter of the Q matrix, leading to even more compact suff stats (see
- * OmegaPolySuffStat and NucPolySuffStat).
- *
- * In terms of implementation, these suffstats are encoded as sparse data
- * structures (since a very small subset of all possible pairs of codons will
- * typcially be visited by the substitution history of a given site, for
- * instance). This sparse encoding is crucial for efficiency (both in terms of
- * time and in terms of RAM usage).
+ * \brief A Poisson-Random-Field sufficient statistic
  */
 
 class PolySuffStat : public SuffStat {
@@ -86,7 +56,7 @@ class PolySuffStat : public SuffStat {
         double total = 0;
         for (auto const &i : polycount) {
             double proba = poissonrandomfield.GetProb(std::get<0>(i.first), std::get<1>(i.first),
-                std::get<2>(i.first), std::get<3>(i.first), &aafitnessarray, &nucmatrix, &theta);
+                std::get<2>(i.first), std::get<3>(i.first), aafitnessarray, nucmatrix, theta);
             if (proba > 0) {
                 total += i.second * log(proba);
             } else {
@@ -107,13 +77,12 @@ class PolySuffStat : public SuffStat {
 };
 
 /**
- * \brief An array of substitution Poly sufficient statistics
+ * \brief An array of Poisson-Random-Field sufficient statistics
  *
  * This class provides an interface for dealing with cases where
  * each item (each site, or each component of a mixture) has a different rate
  * matrix Q_i
  */
-
 class PolySuffStatArray : public SimpleArray<PolySuffStat> {
   public:
     PolySuffStatArray(int insize) : SimpleArray<PolySuffStat>(insize) {}
@@ -128,8 +97,8 @@ class PolySuffStatArray : public SimpleArray<PolySuffStat> {
     //! add Poly sufficient statistics from PhyloProcess (site-heterogeneous case)
     void AddSuffStat(const PhyloProcess &process) { process.AddPolySuffStat(*this); }
 
-    //! return total log prob (summed over all items), given an array of rate
-    //! matrices
+    //! return total log prob (summed over all items), given an array of fitness vector, the
+    //! nucmatrix and theta
     double GetLogProb(PoissonRandomField &poissonrandomfield,
         const Selector<std::vector<double>> &siteaafitnessarray, const GTRSubMatrix &nucmatrix,
         const double &theta) const {
@@ -144,11 +113,62 @@ class PolySuffStatArray : public SimpleArray<PolySuffStat> {
     //! \brief add suffstatarray given as argument to this array based on the
     //! allocations provided as the second argument (mixture models)
     //!
-    //! specifically, for each i=0..GetSize()-1, (*this)[alloc[i]] +=
-    //! suffstatarray[i]
     void Add(const Selector<PolySuffStat> &suffstatarray, const Selector<int> &alloc) {
         for (int i = 0; i < suffstatarray.GetSize(); i++) {
             (*this)[alloc.GetVal(i)] += suffstatarray.GetVal(i);
+        }
+    }
+};
+
+/**
+ * \brief A 2-dimensional-array of Poisson-Random-Field sufficient statistics
+ *
+ * This class provides an interface for dealing with cases where
+ * each item (each site, or each component of a mixture and each branch or each component of the
+ * branch allocation) has a different rate matrix Q_(i,j)
+ */
+class PolySuffStatBidimArray : public SimpleBidimArray<PolySuffStat> {
+  public:
+    PolySuffStatBidimArray(int inrow, int incol)
+        : SimpleBidimArray<PolySuffStat>(inrow, incol, PolySuffStat()) {}
+
+    ~PolySuffStatBidimArray() {}
+
+    //! set all suff stats to 0
+    void Clear() {
+        for (int row = 0; row < GetNrow(); row++) {
+            for (int col = 0; col < GetNcol(); col++) { (*this)(row, col).Clear(); }
+        }
+    }
+
+    //! add Poly sufficient statistics from PhyloProcess (site-heterogeneous and
+    //! branch-heterogeneous case)
+    void AddSuffStat(const PhyloProcess &process) { process.AddPolySuffStat(*this); }
+
+    //! return total log prob (summed over all items), given an array of fitness vector, the
+    //! nucmatrix and theta per taxon
+    double GetLogProb(PoissonRandomField &poissonrandomfield,
+        const Selector<std::vector<double>> &siteaafitnessarray, const GTRSubMatrix &nucmatrix,
+        const ScaledMutationRate &theta) const {
+        double total = 0;
+        for (int row = 0; row < GetNrow(); row++) {
+            for (int col = 0; col < GetNcol(); col++) {
+                total += GetVal(row, col).GetLogProb(poissonrandomfield,
+                    siteaafitnessarray.GetVal(row), nucmatrix, theta.GetTheta(col));
+            };
+        }
+        return total;
+    }
+
+    //! \brief add suffstatarray given as argument to this array based on the
+    //! allocations provided as the second argument (mixture models)
+    //!
+    void Add(
+        const BidimSelector<PolySuffStat> &suffstatbidimarray, const Selector<int> &row_alloc) {
+        for (int row = 0; row < suffstatbidimarray.GetNrow(); row++) {
+            for (int col = 0; col < suffstatbidimarray.GetNcol(); col++) {
+                (*this)(row_alloc.GetVal(row), col) += suffstatbidimarray.GetVal(row, col);
+            }
         }
     }
 };

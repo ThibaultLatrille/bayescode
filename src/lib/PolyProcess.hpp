@@ -5,6 +5,7 @@
 #include "GTRSubMatrix.hpp"
 #include "PoissonRandomField.hpp"
 #include "PolyData.hpp"
+#include "ScaledMutationRate.hpp"
 
 /**
  * \brief PolyProcess is used by PhyloProcess to compute the likelihood the data, in the case
@@ -14,10 +15,10 @@
 class PolyProcess {
   public:
     //! \brief Constructor: takes a (const pointer to a) PolyData
-    PolyProcess(CodonStateSpace *instatespace, PolyData *indata,
-        PoissonRandomField *inpoissonrandomfield,
-        Selector<std::vector<double>> *insiteaafitnessarray, GTRSubMatrix *innucmatrix,
-        double *intheta);
+    PolyProcess(CodonStateSpace &instatespace, PolyData &indata,
+        PoissonRandomField &inpoissonrandomfield,
+        Selector<std::vector<double>> const &insiteaafitnessarray, GTRSubMatrix const &innucmatrix,
+        ScaledMutationRate const &intheta);
 
     ~PolyProcess() /*override*/ = default;
 
@@ -31,15 +32,15 @@ class PolyProcess {
 
     std::tuple<int, int, unsigned, unsigned> GetDerivedTuple(int taxon, int site, int anc_state);
 
-    CodonStateSpace *GetCodonStateSpace() { return statespace; };
-    PolyData *GetPolyData() { return polydata; };
+    CodonStateSpace *GetCodonStateSpace() { return &statespace; };
+    PolyData *GetPolyData() { return &polydata; };
 
   private:
-    PolyData *polydata;
-    PoissonRandomField *poissonrandomfield;
-    CodonStateSpace *statespace;
+    PolyData &polydata;
+    PoissonRandomField &poissonrandomfield;
+    CodonStateSpace &statespace;
 
-    GTRSubMatrix *nucmatrix;
-    Selector<std::vector<double>> *siteaafitnessarray;
-    double *theta;
+    GTRSubMatrix const &nucmatrix;
+    Selector<std::vector<double>> const &siteaafitnessarray;
+    ScaledMutationRate const &theta;
 };

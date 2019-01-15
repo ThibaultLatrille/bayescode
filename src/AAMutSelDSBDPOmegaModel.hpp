@@ -150,8 +150,9 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     PhyloProcess *phyloprocess;
 
     // global theta (4*Ne*u) used for polymorphism
-    double theta;
+    double theta_scale;
     double thetamax;
+    HomogeneousScaledMutationRate *theta;
 
     PolyProcess *polyprocess{nullptr};
     PoissonRandomField *poissonrandomfield{nullptr};
@@ -467,13 +468,14 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
             new MixtureSelector<std::vector<double>>(componentaafitnessarray, sitealloc);
 
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
-        theta = 1e-5;
+        theta_scale = 1e-5;
+        theta = new HomogeneousScaledMutationRate(theta_scale);
         thetamax = 0.1;
         if (polydata != nullptr) {
             poissonrandomfield =
-                new PoissonRandomField(polydata->GetSampleSizeSet(), GetCodonStateSpace());
-            polyprocess = new PolyProcess(GetCodonStateSpace(), polydata, poissonrandomfield,
-                siteaafitnessarray, nucmatrix, &theta);
+                new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
+            polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
+                *siteaafitnessarray, *nucmatrix, *theta);
             sitepolysuffstatarray = new PolySuffStatArray(Nsite);
             componentpolysuffstatarray = new PolySuffStatArray(Ncat);
         }
@@ -502,7 +504,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     double GetOmega() const { return omega; }
 
     //! return current theta value
-    double GetTheta() const { return theta; }
+    double GetTheta() const { return theta->GetTheta(); }
 
     //! \brief const access to array of length-pathsuffstats across branches
     const PoissonSuffStatBranchArray *GetLengthPathSuffStatArray() const {
@@ -709,10 +711,10 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
 
     //! log prior over theta
     double ThetaLogPrior() const {
-        if (theta > thetamax) {
+        if (theta->GetTheta() > thetamax) {
             return -std::numeric_limits<double>::infinity();
         } else {
-            return -log(theta);
+            return -log(theta->GetTheta());
         }
     }
 
@@ -777,7 +779,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         //! sum over all components to get log prob
         if (polyprocess != nullptr) {
             return componentpolysuffstatarray->GetLogProb(
-                *poissonrandomfield, *componentaafitnessarray, *nucmatrix, theta);
+                *poissonrandomfield, *componentaafitnessarray, *nucmatrix, theta->GetTheta());
         } else {
             return 0;
         }
@@ -789,7 +791,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         // sum over all sites allocated to component k
         if (polyprocess != nullptr) {
             return componentpolysuffstatarray->GetVal(k).GetLogProb(
-                *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix, theta);
+                *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix, theta->GetTheta());
         } else {
             return 0.0;
         }
@@ -964,11 +966,11 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
 
     //! MH move on theta
     void MoveTheta() {
-        Move::Scaling(theta, 1.0, 10, &AAMutSelDSBDPOmegaModel::ThetaLogProb,
+        Move::Scaling(theta_scale, 1.0, 10, &AAMutSelDSBDPOmegaModel::ThetaLogProb,
             &AAMutSelDSBDPOmegaModel::NoUpdate, this);
-        Move::Scaling(theta, 0.3, 10, &AAMutSelDSBDPOmegaModel::ThetaLogProb,
+        Move::Scaling(theta_scale, 0.3, 10, &AAMutSelDSBDPOmegaModel::ThetaLogProb,
             &AAMutSelDSBDPOmegaModel::NoUpdate, this);
-        assert(theta <= thetamax);
+        assert(theta_scale <= thetamax);
     }
 
     //! MH move on omega

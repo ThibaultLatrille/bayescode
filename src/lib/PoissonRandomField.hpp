@@ -16,7 +16,7 @@ class PoissonRandomField {
   public:
     //! \brief Constructor: takes a (const pointer to a) PolyData
     PoissonRandomField(
-        std::set<unsigned> sample_size_set, CodonStateSpace *instatespace, unsigned precision = 6);
+        std::set<unsigned> sample_size_set, CodonStateSpace &instatespace, unsigned precision = 6);
 
     ~PoissonRandomField() /*override*/ = default;
 
@@ -24,12 +24,12 @@ class PoissonRandomField {
     //! This method can't be declared const because evaluation of the
     //! likelihood might need to update the pre-computed values
     double GetProb(int anc_state, int der_state, unsigned der_occurence, unsigned sample_size,
-        const std::vector<double> *aafitnessarray, const GTRSubMatrix *nucmatrix,
-        const double *theta);
+        const std::vector<double> &aafitnessarray, const GTRSubMatrix &nucmatrix,
+        const double &theta);
 
 
   private:
-    CodonStateSpace *statespace;
+    CodonStateSpace &statespace;
 
     unsigned precision{10};
     double grid_s_step{0};
@@ -39,8 +39,8 @@ class PoissonRandomField {
 
     //! Use the pre-computed values, and update the data if interpolation is not possible
     double InterpolateProba(int anc_state, int der_state, unsigned der_occurence,
-        unsigned sample_size, const std::vector<double> *aafitnessarray,
-        const GTRSubMatrix *nucmatrix);
+        unsigned sample_size, const std::vector<double> &aafitnessarray,
+        const GTRSubMatrix &nucmatrix);
 
     //! Update the precomputed values
     void UpdateComputed(unsigned sample_size, double s);

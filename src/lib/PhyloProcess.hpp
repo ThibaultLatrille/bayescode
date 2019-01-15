@@ -159,7 +159,13 @@ class PhyloProcess {
         return site_leaf_path_map->GetFinalState();
     }
 
-  private:
+    //! compute path sufficient statistics across all sites and branches and add
+    //! them to suffstatbidimarray (site-heterogeneous taxon-heterogeneous model)
+    void AddPolySuffStat(BidimArray<PolySuffStat> &suffstatbidimarray) const;
+    // TO FIX: why is this method required to be public while the other AddSuffStat are not.
+
+
+private:
     double GetFastLogProb() const;
     double FastSiteLogLikelihood(int site) const;
 
@@ -234,6 +240,7 @@ class PhyloProcess {
     //! conditions
     void AddPathSuffStat(
         BidimArray<PathSuffStat> &suffstatarray, const BranchSelector<int> &branchalloc) const;
+    void AddPathSuffStat(BidimArray<PathSuffStat> &suffstatarray) const;
 
     //! compute path sufficient statistics across all sites and branches and add
     //! them to suffstat (site-branch-homogeneous model)
@@ -262,6 +269,7 @@ class PhyloProcess {
 
     void RecursiveAddPathSuffStat(Tree::NodeIndex from, BidimArray<PathSuffStat> &suffstatarray,
         const BranchSelector<int> &branchalloc) const;
+    void RecursiveAddPathSuffStat(Tree::NodeIndex from, BidimArray<PathSuffStat> &suffstatarray) const;
     void LocalAddPathSuffStat(
         Tree::NodeIndex from, BidimArray<PathSuffStat> &suffstatarray, int cond) const;
 

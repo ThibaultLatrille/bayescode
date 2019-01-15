@@ -114,6 +114,8 @@ class NodeProcess {
 
     double GetVal(Tree::NodeIndex node) const { return node_multivariate.GetVal(node)(dimension); }
 
+    double GetExpVal(Tree::NodeIndex node) const { return exp(GetVal(node)); }
+
     void SlidingMove(Tree::NodeIndex node, double m) { node_multivariate[node](dimension) += m; }
 
   protected:
@@ -161,9 +163,9 @@ class BranchProcess : public SimpleBranchArray<double> {
     //! branch update (at a specific branch) of the branch array
     void UpdateBranch(Tree::NodeIndex parent, Tree::NodeIndex node) {
         (*this)[this->GetTree().branch_index(node)] =
-            (exp(nodeprocess.GetVal(parent)) + exp(nodeprocess.GetVal(node))) / 2;
+            (nodeprocess.GetExpVal(parent) + nodeprocess.GetExpVal(node)) / 2;
         // For geodesic, use :
-        // = (exp(nodeprocess->GetVal(parent)) - exp(nodeprocess->GetVal(node))) /
+        // = (nodeprocess.GetExpVal(parent) - nodeprocess.GetExpVal(node)) /
         // (nodeprocess->GetVal(parent) - nodeprocess->GetVal(node));
     }
 

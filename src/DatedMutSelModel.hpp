@@ -1,5 +1,11 @@
+#pragma once
+
+#include <assert.h>
 #include "AAMutSelNeCodonMatrixBidimArray.hpp"
+#include "BranchComponentMatrixSelector.hpp"
+#include "BranchProduct.hpp"
 #include "Chrono.hpp"
+#include "Chronogram.hpp"
 #include "CodonSequenceAlignment.hpp"
 #include "CodonSuffStat.hpp"
 #include "GTRSubMatrix.hpp"
@@ -8,11 +14,13 @@
 #include "IIDGamma.hpp"
 #include "Move.hpp"
 #include "MultinomialAllocationVector.hpp"
+#include "NodeMultivariateProcess.hpp"
 #include "Permutation.hpp"
 #include "PhyloProcess.hpp"
 #include "PolyProcess.hpp"
 #include "PolySuffStat.hpp"
-#include "SiteSubMatrixSelector.hpp"
+#include "ScaledMutationRateCompound.hpp"
+#include "ScatterSuffStat.hpp"
 #include "StickBreakingProcess.hpp"
 #include "components/ChainComponent.hpp"
 #include "components/Tracer.hpp"
@@ -28,9 +36,8 @@
  * (assumed homogeneous across sites and lineages)
  * - an array of site-specific amino-acid fitness profiles F_ia, for site i and
  * amino-acid a
- * - an omega multiplier, capturing deviations of the non-syn rate from the
- * model (see Rodrigue and Lartillot, 2107); this parameter is fixed to 1 by
- * default.
+ * - A branch Ne
+ * - A branch mutation rate (correlated to Ne)
  *
  * Site-specific amino-acid fitness profiles are drawn from a Dirichlet process,
  * implemented using a truncated stick-breaking process, of concentration
@@ -61,11 +68,6 @@
  * - center of base distribution: uniform Dirichlet
  * - concentration of base distribution: exponential of mean 20.
  *
- * In a multi-gene context, shrinkage across genes can be applied to branch
- * lengths, omega, nucleotide rate parameters (rho and pi), and to the
- * parameters of the base distribution (center and concentration) -- see
- * MultiGeneAAMutSelDSBDPModel.
- *
  */
 
 class DatedMutSelModel : public ChainComponent {
@@ -85,14 +87,31 @@ class DatedMutSelModel : public ChainComponent {
     int Ntaxa;
     int Nbranch;
     // number of conditions (each with different Ne)
-    int Ncond;
 
-    double blhypermean;
-    double blhyperinvshape;
-    SimpleBranchArray<double> *blhypermeanarray;
-    GammaWhiteNoise *branchlength;
-    PoissonSuffStatBranchArray *lengthpathsuffstatarray;
-    GammaSuffStat hyperlengthsuffstat;
+    // Node ages
+    NodeAges *nodeages;
+    // Chronogram (diff between node ages)
+    Chronogram *chronogram;
+
+    int dimension;
+    int invert_whishart_df;
+    double invert_whishart_kappa;
+    // Covariance matrix
+    EMatrix precision_matrix;
+    EVector root_multivariate;
+    NodeMultivariateProcess *node_multivariate;
+
+    // Branch rates (brownian process)
+    NodeProcess *noderates;
+    BranchProcess *branchrates;
+
+    // Branch lengths (product of branch rates and chronogram)
+    BranchwiseProduct *branchlength;
+    BranchwiseProduct *branchscaledpopsize;
+
+    // Branch Population size (brownian process)
+    NodeProcess *nodepopsize;
+    BranchProcess *branchpopsize;
 
     // nucleotide rates hyperparameters
     std::vector<double> nucrelratehypercenter;
@@ -106,7 +125,6 @@ class DatedMutSelModel : public ChainComponent {
 
     // base distribution G0 is itself a stick-breaking mixture of Dirichlet
     // distributions
-
     int baseNcat;
     double basekappa;
     StickBreakingProcess *baseweight;
@@ -135,21 +153,17 @@ class DatedMutSelModel : public ChainComponent {
 
     // which site is under which component
     MultinomialAllocationVector *sitealloc;
-    // which branch is under which condition
-    SimpleBranchArray<int> *branchalloc;
 
     // Bi-dimensional array of codon matrices (one for each distinct branch condition, and one for
     // each aa fitness profile)
-    DatedMutSelCodonMatrixBidimArray *branchcomponentcodonmatrixarray;
+    MutSelNeCodonMatrixBidimArray *branchcomponentcodonmatrixarray;
+    AAMutSelNeCodonSubMatrixArray *rootcomponentcodonmatrixarray;
 
-    // vector of Ne (one per condition)
-    std::vector<double> condition_ne;
+    // this one is used by PhyloProcess: has to be a BranchComponentMatrixSelector<SubMatrix>
+    BranchComponentMatrixSelector<SubMatrix> *branchsitecodonmatrixarray;
 
-    // this one is used by PhyloProcess: has to be a SiteSubMatrixSelector<SubMatrix>
-    SiteSubMatrixSelector<SubMatrix> *branchsitecodonmatrixarray;
-
-    // this one is also used by PhyloProcess: has to be a RootSiteSubMatrixSelector<SubMatrix>
-    RootSiteSubMatrixSelector<SubMatrix> *rootsitecodonmatrixarray;
+    // this one is also used by PhyloProcess: has to be a RootComponentMatrixSelector<SubMatrix>
+    RootComponentMatrixSelector<SubMatrix> *rootsitecodonmatrixarray;
 
     // this one is used by PolyProcess: has to be a Selector<vector<double>>
     MixtureSelector<std::vector<double>> *siteaafitnessarray;
@@ -157,17 +171,21 @@ class DatedMutSelModel : public ChainComponent {
     PhyloProcess *phyloprocess;
 
     // global theta (4*Ne*u) used for polymorphism
-    double theta;
+    double theta_scale;
     double thetamax;
+    CompoundScaledMutationRate *theta;
 
     PolyProcess *polyprocess{nullptr};
     PoissonRandomField *poissonrandomfield{nullptr};
 
-    PathSuffStatBidimArray *sitepathsuffstatarray;
-    PathSuffStatBidimArray *componentpathsuffstatarray;
+    PathSuffStatBidimArray *sitepathsuffstatbidimarray;
+    PathSuffStatBidimArray *componentpathsuffstatbidimarray;
 
-    PolySuffStatArray *sitepolysuffstatarray{nullptr};
-    PolySuffStatArray *componentpolysuffstatarray{nullptr};
+    PolySuffStatBidimArray *sitepolysuffstatbidimarray{nullptr};
+    PolySuffStatBidimArray *componentpolysuffstatbidimarray{nullptr};
+
+    PoissonSuffStatBranchArray *lengthpathsuffstatarray;
+    ScatterSuffStat *scattersuffstat;
 
   public:
     friend std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m);
@@ -220,26 +238,34 @@ class DatedMutSelModel : public ChainComponent {
         NHXParser parser{tree_stream};
         tree = make_from_parser(parser);
 
-        Nbranch = static_cast<int>(tree->nb_nodes() - 1);
+        Nbranch = tree->nb_branches();
 
-        std::vector<int> branch_cond(Nbranch, 0);
-        Ncond = 1;
+        // Node ages
+        nodeages = new NodeAges(*tree);
+        // Chronogram (diff between node ages)
+        chronogram = new Chronogram(*nodeages);
 
-        if (condition_aware) {
-            Ncond = Nbranch;
-            for (int i{0}; i < Nbranch; i++) { branch_cond[i] = i; }
-        }
-        std::cout << "Tree with " << Nbranch << " branches and " << Ncond << " conditions (Ne).\n";
-        assert(Ncond > 0 and Ncond <= Nbranch);
+        dimension = 2;
+        invert_whishart_df = dimension + 1;
+        invert_whishart_kappa = 1.0;
+        root_multivariate = EVector::Constant(dimension, -1.0);
+        root_multivariate(1) = 0.0;
+        precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
 
-        branchalloc = new SimpleBranchArray<int>(*tree, branch_cond);
+        node_multivariate =
+            new NodeMultivariateProcess(*chronogram, precision_matrix, root_multivariate);
 
-        // branch lengths
-        blhypermean = 0.1;
-        blhyperinvshape = 1.0;
-        blhypermeanarray = new SimpleBranchArray<double>(*tree, blhypermean);
-        branchlength = new GammaWhiteNoise(*tree, *blhypermeanarray, blhyperinvshape);
-        lengthpathsuffstatarray = new PoissonSuffStatBranchArray(*tree);
+        // Branch rates (brownian process)
+        noderates = new NodeProcess(*node_multivariate, 0);
+        branchrates = new BranchProcess(*noderates);
+
+        // Branch lengths (product of branch rates and chronogram)
+        branchlength = new BranchwiseProduct(*chronogram, *branchrates);
+
+        // Branch omega (brownian process)
+        nodepopsize = new NodeProcess(*node_multivariate, 1);
+        branchpopsize = new BranchProcess(*nodepopsize);
+        branchscaledpopsize = new BranchwiseProduct(*chronogram, *branchpopsize);
 
         nucrelratehypercenter.assign(Nrr, 1.0 / Nrr);
         nucrelratehyperinvconc = 1.0 / Nrr;
@@ -261,8 +287,7 @@ class DatedMutSelModel : public ChainComponent {
 
         basecenterhypercenter.assign(Naa, 1.0 / Naa);
         basecenterhyperinvconc = 1.0 / Naa;
-        basecenterarray =
-            new IIDDirichlet(baseNcat, basecenterhypercenter, basecenterhyperinvconc);
+        basecenterarray = new IIDDirichlet(baseNcat, basecenterhypercenter, basecenterhyperinvconc);
         basecenterarray->SetUniform();
 
         baseconchypermean = Naa;
@@ -277,12 +302,6 @@ class DatedMutSelModel : public ChainComponent {
             new MixtureSelector<std::vector<double>>(basecenterarray, componentalloc);
         componentconcentrationarray =
             new MixtureSelector<double>(baseconcentrationarray, componentalloc);
-
-        // Vector of Ne (one per condition)
-        condition_ne.resize(Ncond);
-        for (int cond{0}; cond < Ncond; cond++) {
-            condition_ne[cond] = Random::GammaSample(1.0, 1.0);
-        }
 
         //
         // (truncated) Dirichlet mixture of aa fitness profiles
@@ -303,40 +322,45 @@ class DatedMutSelModel : public ChainComponent {
         occupancy = new OccupancySuffStat(Ncat);
 
         // codon matrices per branch and per site
-        branchcomponentcodonmatrixarray = new DatedMutSelCodonMatrixBidimArray(
-            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, &condition_ne, 1.0);
+        branchcomponentcodonmatrixarray = new MutSelNeCodonMatrixBidimArray(
+            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, &branchpopsize->GetArray());
 
         // sub matrices per branch and per site
-        branchsitecodonmatrixarray = new SiteSubMatrixSelector<SubMatrix>(
-            branchcomponentcodonmatrixarray, branchalloc, sitealloc);
+        branchsitecodonmatrixarray = new BranchComponentMatrixSelector<SubMatrix>(
+            branchcomponentcodonmatrixarray, sitealloc, *tree);
+
+        rootcomponentcodonmatrixarray = new AAMutSelNeCodonSubMatrixArray(GetCodonStateSpace(),
+            nucmatrix, componentaafitnessarray, nodepopsize->GetExpVal(tree->root()));
 
         // sub matrices for root, across sites
         rootsitecodonmatrixarray =
-            new RootSiteSubMatrixSelector<SubMatrix>(branchcomponentcodonmatrixarray, sitealloc);
-
+            new RootComponentMatrixSelector<SubMatrix>(rootcomponentcodonmatrixarray, sitealloc);
 
         // selector, specifying which aa fitness array should be used for each site
         siteaafitnessarray =
             new MixtureSelector<std::vector<double>>(componentaafitnessarray, sitealloc);
 
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
-        theta = 1e-5;
+        theta_scale = 1e-5;
+        theta = new CompoundScaledMutationRate(Ntaxa, theta_scale, noderates, nodepopsize);
         thetamax = 0.1;
         if (polydata != nullptr) {
             poissonrandomfield =
-                new PoissonRandomField(polydata->GetSampleSizeSet(), GetCodonStateSpace());
-            polyprocess = new PolyProcess(GetCodonStateSpace(), polydata, poissonrandomfield,
-                siteaafitnessarray, nucmatrix, &theta);
-            sitepolysuffstatarray = new PolySuffStatArray(Nsite);
-            componentpolysuffstatarray = new PolySuffStatArray(Ncat);
+                new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
+            polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
+                *siteaafitnessarray, *nucmatrix, *theta);
+            sitepolysuffstatbidimarray = new PolySuffStatBidimArray(Nsite, Ntaxa);
+            componentpolysuffstatbidimarray = new PolySuffStatBidimArray(Ncat, Ntaxa);
         }
 
         phyloprocess = new PhyloProcess(tree.get(), codondata, branchlength, nullptr,
             branchsitecodonmatrixarray, rootsitecodonmatrixarray, polyprocess);
         phyloprocess->Unfold();
 
-        sitepathsuffstatarray = new PathSuffStatBidimArray(Ncond, Nsite);
-        componentpathsuffstatarray = new PathSuffStatBidimArray(Ncond, Ncat);
+        sitepathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Nsite);
+        componentpathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Ncat);
+        scattersuffstat = new ScatterSuffStat(*tree);
+        lengthpathsuffstatarray = new PoissonSuffStatBranchArray(*tree);
     }
 
     virtual ~DatedMutSelModel() = default;
@@ -345,9 +369,12 @@ class DatedMutSelModel : public ChainComponent {
 
     template <class C>
     void declare_model(C &t) {
-        t.add("branchlength", blhypermean);
-        t.add("branchlength", blhyperinvshape);
-        t.add("branchlength", *branchlength);
+        t.add("nodeages", *nodeages);
+        t.add("node_multivariate", *node_multivariate);
+        t.add("covmatrix", precision_matrix);
+        t.add("root_multivariate", root_multivariate);
+        t.add("invert_whishart_kappa", invert_whishart_kappa);
+        t.add("invert_whishart_df", invert_whishart_df);
         t.add("nucrelrate", nucrelrate);
         t.add("nucstat", nucstat);
         t.add("basekappa", basekappa);
@@ -359,8 +386,7 @@ class DatedMutSelModel : public ChainComponent {
         t.add("weight", *weight);
         t.add("componentaafitnessarray", *componentaafitnessarray);
         t.add("sitealloc", *sitealloc);
-        t.add("condition_ne", condition_ne);
-        if (polyprocess != nullptr) { t.add("theta; ", theta); }
+        if (polyprocess != nullptr) { t.add("theta_scale", theta_scale); }
     }
 
     template <class C>
@@ -368,15 +394,25 @@ class DatedMutSelModel : public ChainComponent {
         t.add("logprior", [this]() { return GetLogPrior(); });
         t.add("lnL", [this]() { return GetLogLikelihood(); });
         // 3x: per coding site (and not per nucleotide site)
-        t.add("length", [this]() { return 3 * branchlength->GetTotalLength(); });
+        t.add("blengthmean", [&]() { return branchlength->GetMean(); });
+        t.add("blengthvar", [&]() { return branchlength->GetVar(); });
         t.add("predicted_dnds", [this]() { return GetPredictedDNDS(); });
-        if (polyprocess != nullptr) { t.add("theta", theta); }
+        if (polyprocess != nullptr) { t.add("theta_scale", theta_scale); }
         t.add("ncluster", [this]() { return GetNcluster(); });
         t.add("kappa", kappa);
         if (baseNcat > 1) {
             t.add("basencluster", [this]() { return GetBaseNcluster(); });
             t.add("basekappa", basekappa);
         }
+        for (int i = 0; i < dimension; i++) {
+            t.add("root_" + std::to_string(i), root_multivariate.coeffRef(i));
+            for (int j = 0; j <= i; j++) {
+                t.add("cov_" + std::to_string(i) + "_" + std::to_string(j),
+                    precision_matrix.coeffRef(i, j));
+            }
+        }
+        t.add("bomegamean", [&]() { return branchscaledpopsize->GetMean(); });
+        t.add("bomegavar", [&]() { return branchscaledpopsize->GetVar(); });
         t.add("aaent", [this]() { return GetMeanAAEntropy(); });
         t.add("meanaaconc", [this]() { return GetMeanComponentAAConcentration(); });
         t.add("aacenterent", [this]() { return GetMeanComponentAAEntropy(); });
@@ -410,13 +446,18 @@ class DatedMutSelModel : public ChainComponent {
     //! \brief tell the codon matrices that their parameters have changed and that
     //! they should be updated
     void UpdateCodonMatrices() {
-        branchcomponentcodonmatrixarray->SetNe(condition_ne);
-        branchcomponentcodonmatrixarray->UpdateCodonMatrices();
+        branchcomponentcodonmatrixarray->SetNe(branchpopsize->GetArray());
+        branchcomponentcodonmatrixarray->CorruptCodonMatrices();
+        rootcomponentcodonmatrixarray->SetNe(nodepopsize->GetExpVal(tree->root()));
+        rootcomponentcodonmatrixarray->UpdateCodonMatrices();
     }
 
     //! \brief tell codon matrices for site i and across conditions that their parameters have
     //! changed and that they should be updated
-    void UpdateCodonMatrix(int i) { branchcomponentcodonmatrixarray->UpdateCodonMatrices(i); }
+    void UpdateCodonMatrix(int i) {
+        branchcomponentcodonmatrixarray->CorruptColCodonMatrices(i);
+        rootcomponentcodonmatrixarray->UpdateCodonMatrices(i);
+    }
 
     //! \brief tell the nucleotide and the codon matrices that their parameters
     //! have changed and that it should be updated
@@ -432,7 +473,52 @@ class DatedMutSelModel : public ChainComponent {
     //! pointer to be called after changing the value of the focal parameter.
     void NoUpdate() {}
 
+    //! \brief Update the BranchProcess (rates and omega) with the underlying NodeProcess, Update
+    //! the Chronogram with the underlying NodeAges. And finally update the branch lengths with the
+    //! Chronogram and the BranchProcess (rates).
+    //!
+    //! Used when the model is restarted or for the posterior predictif.
+    void UpdateBranches() {
+        chronogram->Update();
+        branchpopsize->Update();
+        branchscaledpopsize->Update();
+        branchrates->Update();
+        branchlength->Update();
+    }
+
+    //! \brief Update the chronogram (branch time) and branch lengths around the focal node.
+    //!
+    //! Update needed when the age (NodeAges) of the focal node is changed.
+    void UpdateLocalChronogram(Tree::NodeIndex node) {
+        chronogram->UpdateLocal(node);
+        branchlength->UpdateLocal(node);
+    }
+
+    //! \brief Update the branch rates and lengths around the focal node.
+    //!
+    //! Update needed when the rate (NodeProcess) of the focal node is changed.
+    void UpdateLocalBranchRates(Tree::NodeIndex node) {
+        branchrates->UpdateLocal(node);
+        branchlength->UpdateLocal(node);
+    }
+
+    //! \brief Update the branch omega around the focal node.
+    //!
+    //! Update needed when the omega (NodeProcess) of the focal node is changed.
+    void UpdateLocalBranchPopSize(Tree::NodeIndex node) {
+        branchpopsize->UpdateLocal(node);
+        if (!tree->is_root(node)) {
+            Tree::BranchIndex branch = tree->branch_index(node);
+            branchcomponentcodonmatrixarray->SetRowNe(branch, branchpopsize->GetVal(branch));
+            branchcomponentcodonmatrixarray->CorruptRowCodonMatrices(branch);
+        } else {
+            rootcomponentcodonmatrixarray->SetNe(nodepopsize->GetExpVal(tree->root()));
+            rootcomponentcodonmatrixarray->UpdateCodonMatrices();
+        }
+    }
+
     void Update() {
+        UpdateBranches();
         UpdateBaseOccupancies();
         UpdateOccupancies();
         UpdateMatrices();
@@ -440,6 +526,7 @@ class DatedMutSelModel : public ChainComponent {
     }
 
     void PostPred(std::string name) {
+        UpdateBranches();
         UpdateBaseOccupancies();
         UpdateOccupancies();
         UpdateMatrices();
@@ -453,7 +540,8 @@ class DatedMutSelModel : public ChainComponent {
     //! \brief return total log prior (up to some constant)
     double GetLogPrior() const {
         double total = 0;
-        total += BranchLengthsLogPrior();
+        total += NodeMultivariateLogPrior();
+        total += RootMultivariateLogPrior();
         total += NucRatesLogPrior();
 
         if (baseNcat > 1) {
@@ -475,15 +563,28 @@ class DatedMutSelModel : public ChainComponent {
     //! return joint log prob (log prior + log likelihood)
     double GetLogProb() const { return GetLogPrior() + GetLogLikelihood(); }
 
-    //! log prior over branch lengths (iid exponential of rate lambda)
-    double BranchLengthsLogPrior() const { return branchlength->GetLogProb(); }
+    // Multivariate prior
+    //! log prior over branch rates (brownian process)
+    double NodeMultivariateLogPrior() const { return node_multivariate->GetLogProb(); }
+
+    //! log prior of branch rate (brownian process) around of focal node
+    double LocalNodeMultivariateLogPrior(Tree::NodeIndex node) const {
+        return node_multivariate->GetLocalLogProb(node);
+    }
+
+    //! log prior of
+    double RootMultivariateLogPrior() const { return node_multivariate->GetLogProb(tree->root()); }
+
+    //! log prior of hyperparameters of branch rates (brownian process)
+    double RootMultivariateHyperLogPrior() const { return -root_multivariate.sum(); }
+
 
     //! log prior over theta
     double ThetaLogPrior() const {
-        if (theta > thetamax) {
+        if (theta_scale > thetamax) {
             return -std::numeric_limits<double>::infinity();
         } else {
-            return -log(theta);
+            return -log(theta_scale);
         }
     }
 
@@ -538,8 +639,47 @@ class DatedMutSelModel : public ChainComponent {
     //! log prior of amino-acid fitness profile k
     double AALogPrior(int k) const { return componentaafitnessarray->GetLogProb(k); }
 
+
     //-------------------
-    // Suff Stat and suffstatlogprobs
+    //  Collecting Suff Stats
+    //-------------------
+
+    //! collect sufficient statistics if substitution mappings across sites
+    void CollectSitePathSuffStat() {
+        sitepathsuffstatbidimarray->Clear();
+        sitepathsuffstatbidimarray->AddSuffStat(*phyloprocess);
+        if (polyprocess != nullptr) {
+            sitepolysuffstatbidimarray->Clear();
+            sitepolysuffstatbidimarray->AddSuffStat(*phyloprocess);
+        }
+    }
+
+    //! gather site-specific sufficient statistics component-wise
+    void CollectComponentPathSuffStat() {
+        componentpathsuffstatbidimarray->Clear();
+        componentpathsuffstatbidimarray->Add(*sitepathsuffstatbidimarray, *sitealloc);
+        if (polyprocess != nullptr) {
+            componentpolysuffstatbidimarray->Clear();
+            componentpolysuffstatbidimarray->Add(*sitepolysuffstatbidimarray, *sitealloc);
+        }
+    }
+
+    //! collect sufficient statistics for moving branch lengths (directly from the
+    //! substitution mappings)
+    void CollectLengthSuffStat() {
+        lengthpathsuffstatarray->Clear();
+        lengthpathsuffstatarray->AddLengthPathSuffStat(*phyloprocess);
+    }
+
+    // Scatter (brownian process)
+
+    void CollectScatterSuffStat() {
+        scattersuffstat->Clear();
+        scattersuffstat->AddSuffStat(*node_multivariate);
+    }
+
+    //-------------------
+    //  Log probs for MH moves
     //-------------------
 
     //! return log prob only at the tips due to polymorphism of the substitution mapping,
@@ -547,8 +687,8 @@ class DatedMutSelModel : public ChainComponent {
     double PolySuffStatLogProb() const {
         //! sum over all components to get log prob
         if (polyprocess != nullptr) {
-            return componentpolysuffstatarray->GetLogProb(
-                *poissonrandomfield, *componentaafitnessarray, *nucmatrix, theta);
+            return componentpolysuffstatbidimarray->GetLogProb(
+                *poissonrandomfield, *componentaafitnessarray, *nucmatrix, *theta);
         } else {
             return 0;
         }
@@ -559,8 +699,13 @@ class DatedMutSelModel : public ChainComponent {
     double ComponentPolySuffStatLogProb(int k) const {
         // sum over all sites allocated to component k
         if (polyprocess != nullptr) {
-            return componentpolysuffstatarray->GetVal(k).GetLogProb(
-                *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix, theta);
+            double tot = 0;
+            for (int taxon = 0; taxon < Ntaxa; taxon++) {
+                tot += componentpolysuffstatbidimarray->GetVal(k, taxon).GetLogProb(
+                    *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix,
+                    theta->GetTheta(taxon));
+            }
+            return tot;
         } else {
             return 0.0;
         }
@@ -569,16 +714,16 @@ class DatedMutSelModel : public ChainComponent {
     //! return log prob of the current substitution mapping, as a function of the
     //! current codon substitution process
     double PathSuffStatLogProb() const {
-        return componentpathsuffstatarray->GetLogProb(*branchcomponentcodonmatrixarray) +
+        return componentpathsuffstatbidimarray->GetLogProb(*branchcomponentcodonmatrixarray) +
                PolySuffStatLogProb();
     }
 
     //! return log prob of the substitution mappings over sites allocated to
     //! component k of the mixture
-    double PathSuffStatLogProb(int k) const {
+    double ComponentPathSuffStatLogProb(int k) const {
         double loglk = 0.0;
-        for (int cond{0}; cond < Ncond; cond++) {
-            loglk += componentpathsuffstatarray->GetVal(cond, k).GetLogProb(
+        for (int cond{0}; cond < Nbranch; cond++) {
+            loglk += componentpathsuffstatbidimarray->GetVal(cond, k).GetLogProb(
                 branchcomponentcodonmatrixarray->GetVal(cond, k));
         }
         loglk += ComponentPolySuffStatLogProb(k);
@@ -590,13 +735,81 @@ class DatedMutSelModel : public ChainComponent {
     //! of the center and concentration parameters of this component
     double BaseSuffStatLogProb(int k) const {
         return basesuffstatarray->GetVal(k).GetLogProb(
-                   basecenterarray->GetVal(k), baseconcentrationarray->GetVal(k)) +
+                   basecenterarray->GetVal(k), 1.0 / baseconcentrationarray->GetVal(k)) +
                ComponentPolySuffStatLogProb(k);
     }
 
-    //-------------------
-    //  Log probs for MH moves
-    //-------------------
+    // Node ages and branch rates
+    //! \brief log prob to be recomputed when moving age of focal node
+    double LocalNodeAgeLogProb(Tree::NodeIndex node) const {
+        double tot = 0;
+        tot += LocalNodeMultivariateLogPrior(node);
+        tot += LocalBranchLengthSuffStatLogProb(node);
+        return tot;
+    }
+
+    //! \brief log prob to be recomputed when moving branch rates (brownian process) around of focal
+    //! node
+    double LocalNodeRatesLogProb(Tree::NodeIndex node) const {
+        return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+    }
+
+    //! \brief log prob factor (without prior) to be recomputed when moving age of focal node, or
+    //! when moving branch rates (brownian process) around of focal node.
+    double LocalBranchLengthSuffStatLogProb(Tree::NodeIndex node) const {
+        double tot = 0;
+        // for all children
+        for (auto const &child : tree->children(node)) {
+            tot += BranchLengthSuffStatLogProb(tree->branch_index(child));
+        }
+        if (!tree->is_root(node)) {
+            // for the branch attached to the node
+            tot += BranchLengthSuffStatLogProb(tree->branch_index(node));
+        }
+        assert(tot != 0);
+        return tot;
+    }
+
+    //! \brief return log prob of current substitution mapping (on focal branch), as a function of
+    //! the length of a given branch
+    double BranchLengthSuffStatLogProb(Tree::BranchIndex branch) const {
+        return lengthpathsuffstatarray->GetVal(branch).GetLogProb(branchlength->GetVal(branch));
+    }
+
+    // PopSize
+    //! \brief log prob to be recomputed when moving omega (brownian process) around of focal node
+    double LocalNodePopSizeLogProb(Tree::NodeIndex node) const {
+        return LocalNodeMultivariateLogPrior(node) + LocalNodePopSizeSuffStatLogProb(node);
+    }
+
+    //! \brief log prob factor (without prior) to be recomputed when moving omega (brownian process)
+    //! around of focal node
+    double LocalNodePopSizeSuffStatLogProb(Tree::NodeIndex node) const {
+        double tot = 0;
+        // for all children
+        for (auto const &child : tree->children(node)) {
+            tot += NodePopSizeSuffStatLogProb(tree->branch_index(child));
+        }
+        if (!tree->is_root(node)) {
+            // for the branch attached to the node
+            tot += NodePopSizeSuffStatLogProb(tree->branch_index(node));
+        }
+        assert(tot != 0);
+        return tot;
+    }
+
+    //! \brief return log prob of current substitution mapping (on focal branch), as a function of
+    //! omega of a given branch
+    double NodePopSizeSuffStatLogProb(Tree::BranchIndex branch) const {
+        return componentpathsuffstatbidimarray->GetRowLogProb(
+            branch, *branchcomponentcodonmatrixarray);
+    }
+
+    //! Root log prob
+    double RootLogProb() const {
+        return RootMultivariateHyperLogPrior() + RootMultivariateLogPrior();
+    }
+
 
     //! log prob factor to be recomputed when Theta=4*Ne*u
     double ThetaLogProb() const { return ThetaLogPrior() + PolySuffStatLogProb(); }
@@ -619,37 +832,6 @@ class DatedMutSelModel : public ChainComponent {
     //! parameter of the first-level strick breaking process
     double StickBreakingHyperLogProb() const {
         return StickBreakingHyperLogPrior() + StickBreakingLogPrior();
-    }
-
-    //-------------------
-    //  Collecting Suff Stats
-    //-------------------
-
-    //! collect sufficient statistics if substitution mappings across sites
-    void CollectSitePathSuffStat() {
-        sitepathsuffstatarray->Clear();
-        sitepathsuffstatarray->AddSuffStat(*phyloprocess, *branchalloc);
-        if (polyprocess != nullptr) {
-            sitepolysuffstatarray->Clear();
-            sitepolysuffstatarray->AddSuffStat(*phyloprocess);
-        }
-    }
-
-    //! gather site-specific sufficient statistics component-wise
-    void CollectComponentPathSuffStat() {
-        componentpathsuffstatarray->Clear();
-        componentpathsuffstatarray->Add(*sitepathsuffstatarray, *sitealloc);
-        if (polyprocess != nullptr) {
-            componentpolysuffstatarray->Clear();
-            componentpolysuffstatarray->Add(*sitepolysuffstatarray, *sitealloc);
-        }
-    }
-
-    //! collect sufficient statistics for moving branch lengths (directly from the
-    //! substitution mappings)
-    void CollectLengthSuffStat() {
-        lengthpathsuffstatarray->Clear();
-        lengthpathsuffstatarray->AddLengthPathSuffStat(*phyloprocess);
     }
 
     //-------------------
@@ -694,16 +876,131 @@ class DatedMutSelModel : public ChainComponent {
     //! complete series of MCMC moves on all parameters (repeated nrep times)
     void MoveParameters(int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
-            MoveBranchLengths();
+            CollectLengthSuffStat();
+            MoveNodeAges(1.0, 3);
+            MoveNodeAges(0.1, 3);
+
+            MoveNodeRates(1.0, 3);
+            MoveNodeRates(0.1, 3);
 
             CollectSitePathSuffStat();
             CollectComponentPathSuffStat();
             MoveNucRates();
+            MoveNodePopSize(1.0, 3);
+            MoveNodePopSize(0.1, 3);
+
+            CollectScatterSuffStat();
+            SamplePrecisionMatrix();
+            MoveRootMultivariate(1.0, 3);
+            MoveRootMultivariate(0.1, 3);
+            UpdateMatrices();
 
             if (polyprocess != nullptr) { MoveTheta(); }
 
             MoveAAMixture(3);
             MoveBase(3);
+        }
+    }
+
+
+    void SamplePrecisionMatrix() {
+        scattersuffstat->SamplePrecisionMatrix(
+            precision_matrix, invert_whishart_df, invert_whishart_kappa);
+    };
+
+    void MoveRootMultivariate(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) {
+            for (int dim = 0; dim < dimension; dim++) {
+                double logratio = -RootLogProb();
+
+                double m = tuning * (Random::Uniform() - 0.5);
+
+                root_multivariate(dim) += m;
+
+                logratio += RootLogProb();
+
+                bool accept = (log(Random::Uniform()) < logratio);
+                if (!accept) { root_multivariate(dim) -= m; }
+            }
+        }
+    };
+
+    //! MH moves on branch ages
+    void MoveNodeAges(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) {
+            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
+                if (!tree->is_root(node) and !tree->is_leaf(node)) { MoveNodeAge(node, tuning); }
+            }
+        }
+    }
+
+    //! MH moves on branch ages for a focal node
+    void MoveNodeAge(Tree::NodeIndex node, double tuning) {
+        double logratio = -LocalNodeAgeLogProb(node);
+
+        double bk = nodeages->GetVal(node);
+        double sliding = tuning * (Random::Uniform() - 0.5);
+        nodeages->SlidingMove(node, sliding);
+        UpdateLocalChronogram(node);
+
+        logratio += LocalNodeAgeLogProb(node);
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) {
+            (*nodeages)[node] = bk;
+            UpdateLocalChronogram(node);
+        }
+    }
+
+    //! MH moves on branch rates (brownian process)
+    void MoveNodeRates(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) {
+            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
+                MoveNodeProcessRate(node, tuning);
+            }
+        }
+    }
+
+    //! MH moves on branch rates (brownian process) for a focal node
+    void MoveNodeProcessRate(Tree::NodeIndex node, double tuning) {
+        double logratio = -LocalNodeRatesLogProb(node);
+
+        double m = tuning * noderates->GetSigma() * (Random::Uniform() - 0.5);
+        noderates->SlidingMove(node, m);
+        UpdateLocalBranchRates(node);
+
+        logratio += LocalNodeRatesLogProb(node);
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) {
+            noderates->SlidingMove(node, -m);
+            UpdateLocalBranchRates(node);
+        }
+    }
+
+    //! MH moves on branch omega (brownian process)
+    void MoveNodePopSize(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) {
+            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
+                MoveNodePopSize(node, tuning);
+            }
+        }
+    }
+
+    //! MH moves on branch omega (brownian process) for a focal node
+    void MoveNodePopSize(Tree::NodeIndex node, double tuning) {
+        double logratio = -LocalNodePopSizeLogProb(node);
+
+        double m = tuning * nodepopsize->GetSigma() * (Random::Uniform() - 0.5);
+        nodepopsize->SlidingMove(node, m);
+        UpdateLocalBranchPopSize(node);
+
+        logratio += LocalNodePopSizeLogProb(node);
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) {
+            nodepopsize->SlidingMove(node, -m);
+            UpdateLocalBranchPopSize(node);
         }
     }
 
@@ -713,24 +1010,14 @@ class DatedMutSelModel : public ChainComponent {
         MoveBaseMixture(nrep);
     }
 
-    //! Gibbs resample branch lengths (based on sufficient statistics and current
-    //! value of lambda)
-    void ResampleBranchLengths() {
-        CollectLengthSuffStat();
-        branchlength->GibbsResample(*lengthpathsuffstatarray);
-    }
-
-    //! MCMC move schedule on branch lengths
-    void MoveBranchLengths() { ResampleBranchLengths(); }
-
 
     //! MH move on theta
     void MoveTheta() {
-        Move::Scaling(
-            theta, 1.0, 10, &DatedMutSelModel::ThetaLogProb, &DatedMutSelModel::NoUpdate, this);
-        Move::Scaling(
-            theta, 0.3, 10, &DatedMutSelModel::ThetaLogProb, &DatedMutSelModel::NoUpdate, this);
-        assert(theta <= thetamax);
+        Move::Scaling(theta_scale, 1.0, 10, &DatedMutSelModel::ThetaLogProb,
+            &DatedMutSelModel::NoUpdate, this);
+        Move::Scaling(theta_scale, 0.3, 10, &DatedMutSelModel::ThetaLogProb,
+            &DatedMutSelModel::NoUpdate, this);
+        assert(theta_scale <= thetamax);
     }
 
     //! MH move on nucleotide rate parameters
@@ -799,11 +1086,11 @@ class DatedMutSelModel : public ChainComponent {
                 std::vector<double> &aa = (*componentaafitnessarray)[i];
                 for (int rep = 0; rep < nrep; rep++) {
                     for (int l = 0; l < Naa; l++) { bk[l] = aa[l]; }
-                    double deltalogprob = -AALogPrior(i) - PathSuffStatLogProb(i);
+                    double deltalogprob = -AALogPrior(i) - ComponentPathSuffStatLogProb(i);
                     double loghastings = Random::ProfileProposeMove(aa, Naa, tuning, n);
                     deltalogprob += loghastings;
                     UpdateCodonMatrix(i);
-                    deltalogprob += AALogPrior(i) + PathSuffStatLogProb(i);
+                    deltalogprob += AALogPrior(i) + ComponentPathSuffStatLogProb(i);
                     int accepted = (log(Random::Uniform()) < deltalogprob);
                     if (accepted) {
                         nacc++;
@@ -850,7 +1137,7 @@ class DatedMutSelModel : public ChainComponent {
 
                 for (int rep = 0; rep < nrep; rep++) {
                     double deltalogprob =
-                        -GammaAALogPrior(x, aacenter, aaconc) - PathSuffStatLogProb(i);
+                        -GammaAALogPrior(x, aacenter, aaconc) - ComponentPathSuffStatLogProb(i);
 
                     double loghastings = 0;
                     z = 0;
@@ -870,7 +1157,8 @@ class DatedMutSelModel : public ChainComponent {
 
                     UpdateCodonMatrix(i);
 
-                    deltalogprob += GammaAALogPrior(x, aacenter, aaconc) + PathSuffStatLogProb(i);
+                    deltalogprob +=
+                        GammaAALogPrior(x, aacenter, aaconc) + ComponentPathSuffStatLogProb(i);
 
                     int accepted = (log(Random::Uniform()) < deltalogprob);
                     if (accepted) {
@@ -913,7 +1201,7 @@ class DatedMutSelModel : public ChainComponent {
         const std::vector<double> &w = weight->GetArray();
 
         // !!!!! Here the branch should not matter, so we use the root.
-        const PathSuffStat &suffstat = sitepathsuffstatarray->GetVal(0, site);
+        const PathSuffStat &suffstat = sitepathsuffstatbidimarray->GetVal(0, site);
         for (int i = 0; i < Ncat; i++) {
             // !!!!! Here the condition should not matter, so we use site 0.
             double tmp = suffstat.GetLogProb(branchcomponentcodonmatrixarray->GetVal(0, 0));
@@ -1153,8 +1441,8 @@ class DatedMutSelModel : public ChainComponent {
         double mean = 0;
         for (int k = 0; k < Ncat; k++) {
             if (occupancy->GetVal(k)) {
-                for (int cond{0}; cond < Ncond; cond++) {
-                    mean += branchalloc->occupancy(cond) * occupancy->GetVal(k) *
+                for (int cond{0}; cond < Nbranch; cond++) {
+                    mean += occupancy->GetVal(k) *
                             branchcomponentcodonmatrixarray->GetVal(cond, k).GetPredictedDNDS();
                 }
             }

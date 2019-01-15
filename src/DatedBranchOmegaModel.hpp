@@ -169,7 +169,7 @@ class DatedBranchOmegaModel : public ChainComponent {
         codonmatrixbrancharray =
             new MGOmegaCodonSubMatrixBranchArray(GetCodonStateSpace(), nucmatrix, branchomega);
         rootcodonmatrix = new MGOmegaCodonSubMatrix(
-            GetCodonStateSpace(), nucmatrix, nodeomega->GetVal(tree->root()));
+            GetCodonStateSpace(), nucmatrix, nodeomega->GetExpVal(tree->root()));
 
         // PhyloProcess
         phyloprocess = new PhyloProcess(
@@ -246,7 +246,7 @@ class DatedBranchOmegaModel : public ChainComponent {
     //! whichever component is requested later on upon demand.
     void TouchCodonMatrix() {
         codonmatrixbrancharray->UpdateCodonMatrices();
-        rootcodonmatrix->SetOmega(nodeomega->GetVal(tree->root()));
+        rootcodonmatrix->SetOmega(nodeomega->GetExpVal(tree->root()));
         rootcodonmatrix->CorruptMatrix();
     }
 

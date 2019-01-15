@@ -142,10 +142,10 @@ dated: _build
 	@cd _build ; make --no-print-directory -j8 dated datedmutsel
 	@rm -rf _dated
 	@mkdir _dated
-	_build/dated -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/gal4
-	_build/dated _dated/gal4
-	_build/datedmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/gal4
-	_build/datedmutsel _dated/gal4
+	_build/datedmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/mutsel_gal4
+	_build/datedmutsel _dated/mutsel_gal4
+	_build/dated -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/omega_gal4
+	_build/dated _dated/omega_gal4
 
 .PHONY: diffseldsparse
 diffseldsparse: all

@@ -758,7 +758,7 @@ class DiffSelDoublySparseModel : public ChainComponent {
     //! \brief return log prob of the current substitution mapping, as a function
     //! of the current codon substitution process, at site i
     double SiteSuffStatLogProb(int site) const {
-        return suffstatarray->GetLogProb(site, *condsubmatrixarray);
+        return suffstatarray->GetColLogProb(site, *condsubmatrixarray);
     }
 
     //! return log prob of current fitness parameters, conditional on their

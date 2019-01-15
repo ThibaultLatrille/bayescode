@@ -260,6 +260,12 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
         process.AddPathSuffStat(*this, branchalloc);
     }
 
+    //! add path sufficient statistics from PhyloProcess (site- and
+    //! branch-heterogeneous case)
+    void AddSuffStat(const PhyloProcess &process) {
+        process.AddPathSuffStat(*this);
+    }
+
     //! \brief add suffstatarray given as argument to this array based on the allocations provided
     //! as the second argument (mixture models)
     void Add(const BidimSelector<PathSuffStat> &suffstatarray, const Selector<int> &alloc) {
@@ -274,14 +280,23 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
     //! array of rate matrices
     double GetLogProb(const BidimSelector<SubMatrix> &matrixarray) const {
         double total = 0;
-        for (int j = 0; j < this->GetNcol(); j++) { total += GetLogProb(j, matrixarray); }
+        for (int j = 0; j < this->GetNcol(); j++) { total += GetColLogProb(j, matrixarray); }
         return total;
     }
 
     //! return log prob summed over a given column
-    double GetLogProb(int j, const BidimSelector<SubMatrix> &matrixarray) const {
+    double GetColLogProb(int j, const BidimSelector<SubMatrix> &matrixarray) const {
         double total = 0;
         for (int i = 0; i < this->GetNrow(); i++) {
+            total += GetVal(i, j).GetLogProb(matrixarray.GetVal(i, j));
+        }
+        return total;
+    }
+
+    //! return log prob summed over a given row
+    double GetRowLogProb(int i, const BidimSelector<SubMatrix> &matrixarray) const {
+        double total = 0;
+        for (int j = 0; j < this->GetNcol(); j++) {
             total += GetVal(i, j).GetLogProb(matrixarray.GetVal(i, j));
         }
         return total;
