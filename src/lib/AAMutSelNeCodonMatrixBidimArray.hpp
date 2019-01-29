@@ -85,22 +85,18 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
 
     //! signal corruption for column (site) j
     void CorruptColCodonMatrices(int j) {
-        assert(0 <= j and j < GetNcol());
-        assert(GetNcol() > 0);
         assert(GetNrow() > 0);
         for (int i = 0; i < GetNrow(); i++) { CorruptMatrix(i, j); }
     }
 
     //! signal corruption for row (branch) i
     void CorruptRowCodonMatrices(int i) {
-        for (int j = 0; j < GetNrow(); j++) { CorruptMatrix(i, j); }
+        assert(GetNcol() > 0);
+        for (int j = 0; j < GetNcol(); j++) { CorruptMatrix(i, j); }
     }
 
     //! signal corruption for row (branch) i and column (site) j
     void CorruptMatrix(int i, int j) {
-        assert(0 <= i and i < GetNrow());
-        assert(GetNcol() > 0);
-        assert(GetNrow() > 0);
         (*this)(i, j).CorruptMatrix();
     }
 
