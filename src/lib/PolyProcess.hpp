@@ -17,8 +17,8 @@ class PolyProcess {
     //! \brief Constructor: takes a (const pointer to a) PolyData
     PolyProcess(CodonStateSpace &instatespace, PolyData &indata,
         PoissonRandomField &inpoissonrandomfield,
-        Selector<std::vector<double>> const &insiteaafitnessarray, GTRSubMatrix const &innucmatrix,
-        ScaledMutationRate const &intheta);
+        MixtureSelector<std::vector<double>> const &insiteaafitnessarray,
+        GTRSubMatrix const &innucmatrix, ScaledMutationRate const &intheta);
 
     ~PolyProcess() /*override*/ = default;
 
@@ -41,6 +41,6 @@ class PolyProcess {
     CodonStateSpace &statespace;
 
     GTRSubMatrix const &nucmatrix;
-    Selector<std::vector<double>> const &siteaafitnessarray;
+    MixtureSelector<std::vector<double>> const &siteaafitnessarray;
     ScaledMutationRate const &theta;
 };

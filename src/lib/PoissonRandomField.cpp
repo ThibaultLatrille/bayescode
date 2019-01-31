@@ -83,10 +83,15 @@ double PoissonRandomField::InterpolateProba(int anc_state, int der_state, unsign
         ComputedProb.at(sample_size).begin(), ComputedProb.at(sample_size).end(), s, PairLowerThan);
     auto it_low = prev(it_up);
 
-    // Linear interpolation using the closest (lower and upper) pre-computation available
-    double p = (s - it_low->first) / (it_up->first - it_low->first);
+    double f;
+    if (it_low->first == s) {
+        f = it_low->second.at(der_occurence);
+    } else {
+        // Linear interpolation using the closest (lower and upper) pre-computation available
+        double p = (s - it_low->first) / (it_up->first - it_low->first);
+        f = p * it_up->second.at(der_occurence) + (1 - p) * it_low->second.at(der_occurence);
+    }
 
-    double f = p * it_up->second.at(der_occurence) + (1 - p) * it_low->second.at(der_occurence);
 
     int pos = statespace.GetDifferingPosition(anc_state, der_state);
     assert(0 <= pos and pos < 3);

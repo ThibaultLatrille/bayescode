@@ -4,8 +4,9 @@
 using namespace std;
 
 PolyProcess::PolyProcess(CodonStateSpace &instatespace, PolyData &indata,
-    PoissonRandomField &inpoissonrandomfield, Selector<vector<double>> const &insiteaafitnessarray,
-    GTRSubMatrix const &innucmatrix, ScaledMutationRate const &intheta)
+    PoissonRandomField &inpoissonrandomfield,
+    MixtureSelector<vector<double>> const &insiteaafitnessarray, GTRSubMatrix const &innucmatrix,
+    ScaledMutationRate const &intheta)
     : polydata{indata},
       poissonrandomfield{inpoissonrandomfield},
       statespace{instatespace},
