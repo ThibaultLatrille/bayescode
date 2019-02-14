@@ -21,6 +21,7 @@ class DatedMutselArgParse : public BaseArgParse {
     SwitchArg condition_aware{"b", "condition_aware",
         "One Ne per condition, if the tree doesn't have condition, then one Ne per branch", cmd,
         false};
+    ValueArg<std::string> profiles{"c", "profiles", "Preferences profiles (to clamp)", false, "", "string", cmd};
     SwitchArg polymorphism_aware{"p", "polymorphism_aware", "Use polymorphic data", cmd, false};
 };
 
@@ -41,7 +42,8 @@ int main(int argc, char *argv[]) {
         cmd.parse();
         chain_driver =
             new ChainDriver(cmd.chain_name(), args.every.getValue(), args.until.getValue());
-        model = unique_ptr<DatedMutSelModel>(new DatedMutSelModel(args.alignment.getValue(), args.treefile.getValue(),
+        model = unique_ptr<DatedMutSelModel>(new DatedMutSelModel(args.alignment.getValue(),
+            args.treefile.getValue(), aamutsel_args.profiles.getValue(),
             aamutsel_args.ncat.getValue(), aamutsel_args.basencat.getValue(),
             aamutsel_args.condition_aware.getValue(), aamutsel_args.polymorphism_aware.getValue()));
         model->Update();

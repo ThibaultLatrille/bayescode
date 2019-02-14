@@ -651,9 +651,9 @@ void PhyloProcess::AddPolySuffStat(Array<PolySuffStat> &suffstatarray) const {
 }
 void PhyloProcess::AddPolySuffStat(BidimArray<PolySuffStat> &suffstatbidimarray) const {
     assert(polyprocess != nullptr);
-    for (int site = 0; site < GetNsite(); site++) {
-        for (int taxon = 0; taxon < GetNtaxa(); taxon++) {
-            suffstatbidimarray(site, taxon).IncrementPolyCount(
+    for (int taxon = 0; taxon < GetNtaxa(); taxon++) {
+        for (int site = 0; site < GetNsite(); site++) {
+            suffstatbidimarray(taxon, site).IncrementPolyCount(
                     polyprocess->GetDerivedTuple(taxon, site, GetPathState(taxon, site)));
         }
     }

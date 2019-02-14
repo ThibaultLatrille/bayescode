@@ -113,6 +113,7 @@ class NodeProcess {
     const Tree &GetTree() const { return node_multivariate.GetTree(); }
 
     double GetVal(Tree::NodeIndex node) const { return node_multivariate.GetVal(node)(dimension); }
+    double &operator[](Tree::NodeIndex node) { return node_multivariate[node](dimension); }
 
     double GetExpVal(Tree::NodeIndex node) const { return exp(GetVal(node)); }
 

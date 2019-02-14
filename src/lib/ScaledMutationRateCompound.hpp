@@ -15,17 +15,22 @@ class CompoundScaledMutationRate : public ScaledMutationRate {
     //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
     //! rate (a NodeProcess) and the population size (a NodeProcess).
     CompoundScaledMutationRate(int Ntaxa, double const &intheta_scale,
-        NodeProcess const *innode_rates, NodeProcess const *innode_popsize)
-        : theta_scale{intheta_scale}, node_rates{innode_rates}, node_popsize{innode_popsize} {};
+        NodeProcess const *innode_rates, NodeProcess const *innode_popsize, TaxonSet const &taxon)
+        : theta_scale{intheta_scale}, node_rates{innode_rates}, node_popsize{innode_popsize} {
+        reverse_index_table = taxon.get_reverse_index_table(&node_rates->GetTree());
+    };
 
     ~CompoundScaledMutationRate() override = default;
 
     double GetTheta(int taxon) const override {
-        return theta_scale * node_rates->GetExpVal(taxon) * node_popsize->GetExpVal(taxon);
+        Tree::NodeIndex node = reverse_index_table[taxon];
+        return theta_scale * node_rates->GetExpVal(node) * node_popsize->GetExpVal(node);
     }
 
   private:
     double const &theta_scale;
     NodeProcess const *node_rates;
     NodeProcess const *node_popsize;
+
+    std::vector<Tree::NodeIndex> reverse_index_table;
 };

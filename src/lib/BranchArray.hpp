@@ -157,6 +157,27 @@ class SimpleBranchArray : public BranchArray<T> {
         return *this;
     }
 
+
+    //! get sum over the branch array
+    double GetSum() const {
+        double m1 = 0;
+        for (int i = 0; i < tree.nb_branches(); i++) { m1 += GetVal(i); }
+        return m1;
+    }
+
+    //! get mean over the branch array
+    double GetMean() const { return GetSum() / tree.nb_branches(); }
+
+    //! get variance over the branch array
+    double GetVar() const {
+        double m1 = GetMean();
+        double m2 = 0;
+        for (int i = 0; i < tree.nb_branches(); i++) { m2 += GetVal(i) * GetVal(i); }
+        m2 /= tree.nb_branches();
+        m2 -= m1 * m1;
+        return m2;
+    }
+
     //! return a const ref to the std::vector<T> of which this class is the
     //! interface
     const std::vector<T> &GetArray() const { return array; }

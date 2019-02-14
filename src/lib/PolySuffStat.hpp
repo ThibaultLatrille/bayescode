@@ -152,9 +152,10 @@ class PolySuffStatBidimArray : public SimpleBidimArray<PolySuffStat> {
         const ScaledMutationRate &theta) const {
         double total = 0;
         for (int row = 0; row < GetNrow(); row++) {
+            double d_theta = theta.GetTheta(row);
             for (int col = 0; col < GetNcol(); col++) {
                 total += GetVal(row, col).GetLogProb(poissonrandomfield,
-                    siteaafitnessarray.GetVal(row), nucmatrix, theta.GetTheta(col));
+                    siteaafitnessarray.GetVal(col), nucmatrix, d_theta);
             };
         }
         return total;
@@ -164,10 +165,10 @@ class PolySuffStatBidimArray : public SimpleBidimArray<PolySuffStat> {
     //! allocations provided as the second argument (mixture models)
     //!
     void Add(
-        const BidimSelector<PolySuffStat> &suffstatbidimarray, const Selector<int> &row_alloc) {
+        const BidimSelector<PolySuffStat> &suffstatbidimarray, const Selector<int> &col_alloc) {
         for (int row = 0; row < suffstatbidimarray.GetNrow(); row++) {
             for (int col = 0; col < suffstatbidimarray.GetNcol(); col++) {
-                (*this)(row_alloc.GetVal(row), col) += suffstatbidimarray.GetVal(row, col);
+                (*this)(row, col_alloc.GetVal(col)) += suffstatbidimarray.GetVal(row, col);
             }
         }
     }

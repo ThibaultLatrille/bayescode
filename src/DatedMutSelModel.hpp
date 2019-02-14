@@ -70,11 +70,62 @@
  *
  */
 
+double distance(std::vector<double> const &v1, std::vector<double> const &v2) {
+    double tot = 0;
+    assert(v1.size() == v2.size());
+    for (size_t i = 0; i < v1.size(); i++) { tot += abs(v1[i] - v2[i]); }
+    return tot;
+}
+
+std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferences(
+    std::string const &file_name) {
+    std::vector<std::vector<double>> fitness_profiles{};
+    std::vector<size_t> alloc;
+
+    std::ifstream input_stream(file_name);
+    if (!input_stream) {
+        std::cerr << "Preferences file " << file_name << " doesn't exist" << std::endl;
+    }
+
+    std::string line;
+
+    // skip the header of the file
+    getline(input_stream, line);
+
+    while (getline(input_stream, line)) {
+        std::vector<double> fitness_profil(20, 0.0);
+        std::string word;
+        std::istringstream line_stream(line);
+        unsigned counter{0};
+
+        while (getline(line_stream, word, ' ')) {
+            if (counter > 2) { fitness_profil[counter - 3] = stod(word); }
+            counter++;
+        }
+
+        bool push = true;
+        for (size_t i = 0; i < fitness_profiles.size(); i++) {
+            if (distance(fitness_profiles[i], fitness_profil) < 1e-5) {
+                push = false;
+                alloc.push_back(i);
+                break;
+            }
+        }
+        if (push) {
+            fitness_profiles.push_back(fitness_profil);
+        } else {
+            alloc.push_back(alloc.size());
+        }
+    }
+    return std::make_tuple(fitness_profiles, alloc);
+}
+
 class DatedMutSelModel : public ChainComponent {
-    std::string datafile, treefile;
+    std::string datafile, treefile, profiles;
 
     bool condition_aware;
     bool polymorphism_aware;
+    bool clamp_profiles = false;
 
     std::unique_ptr<const Tree> tree;
 
@@ -105,13 +156,12 @@ class DatedMutSelModel : public ChainComponent {
     NodeProcess *noderates;
     BranchProcess *branchrates;
 
-    // Branch lengths (product of branch rates and chronogram)
-    BranchwiseProduct *branchlength;
-    BranchwiseProduct *branchscaledpopsize;
-
     // Branch Population size (brownian process)
     NodeProcess *nodepopsize;
     BranchProcess *branchpopsize;
+
+    // Branch lengths (product of branch rates and chronogram)
+    BranchwiseProduct *branchlength;
 
     // nucleotide rates hyperparameters
     std::vector<double> nucrelratehypercenter;
@@ -207,10 +257,11 @@ class DatedMutSelModel : public ChainComponent {
     //! - baseNcat: truncation of the second-level stick-breaking process (by
     //! default: 1)
     //! - polymorphism_aware: boolean to force using polymorphism data
-    DatedMutSelModel(std::string indatafile, std::string intreefile, int inNcat, int inbaseNcat,
-        bool incondition_aware, bool inpolymorphism_aware)
+    DatedMutSelModel(std::string indatafile, std::string intreefile, std::string inprofiles,
+        int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware)
         : datafile(indatafile),
           treefile(intreefile),
+          profiles(inprofiles),
           condition_aware(incondition_aware),
           polymorphism_aware(inpolymorphism_aware),
           baseNcat(inbaseNcat),
@@ -223,9 +274,17 @@ class DatedMutSelModel : public ChainComponent {
         Nsite = codondata->GetNsite();  // # columns
         Ntaxa = codondata->GetNtaxa();
 
+        std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> prefs{};
         if (Ncat <= 0) { Ncat = Nsite; }
         if (Ncat > Nsite) { Ncat = Nsite; }
         if (Ncat > 100) { Ncat = 100; }
+        if (!profiles.empty() and profiles != "Null") {
+            prefs = open_preferences(profiles);
+            clamp_profiles = true;
+            Ncat = static_cast<int>(std::get<0>(prefs).size());
+            assert(static_cast<int>(std::get<1>(prefs).size()) == Nsite);
+        }
+        assert(Ncat <= Nsite);
 
         std::cerr << "-- Number of sites: " << Nsite << std::endl;
         std::cerr << "ncat : " << Ncat << '\n';
@@ -248,24 +307,24 @@ class DatedMutSelModel : public ChainComponent {
         dimension = 2;
         invert_whishart_df = dimension + 1;
         invert_whishart_kappa = 1.0;
-        root_multivariate = EVector::Constant(dimension, -1.0);
-        root_multivariate(1) = 0.0;
+        root_multivariate = EVector::Constant(dimension, 0.0);
+        root_multivariate(1) = -1.0;
         precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
 
         node_multivariate =
             new NodeMultivariateProcess(*chronogram, precision_matrix, root_multivariate);
 
+        // Branch omega (brownian process)
+        nodepopsize = new NodeProcess(*node_multivariate, 0);
+        branchpopsize = new BranchProcess(*nodepopsize);
+
         // Branch rates (brownian process)
-        noderates = new NodeProcess(*node_multivariate, 0);
+        noderates = new NodeProcess(*node_multivariate, 1);
         branchrates = new BranchProcess(*noderates);
 
         // Branch lengths (product of branch rates and chronogram)
         branchlength = new BranchwiseProduct(*chronogram, *branchrates);
 
-        // Branch omega (brownian process)
-        nodepopsize = new NodeProcess(*node_multivariate, 1);
-        branchpopsize = new BranchProcess(*nodepopsize);
-        branchscaledpopsize = new BranchwiseProduct(*chronogram, *branchpopsize);
 
         nucrelratehypercenter.assign(Nrr, 1.0 / Nrr);
         nucrelratehyperinvconc = 1.0 / Nrr;
@@ -317,6 +376,15 @@ class DatedMutSelModel : public ChainComponent {
 
         // site allocations to the mixture (multinomial allocation)
         sitealloc = new MultinomialAllocationVector(Nsite, weight->GetArray());
+        if (clamp_profiles) {
+            for (int cat = 0; cat < Ncat; cat++) {
+                (*componentaafitnessarray)[cat] = std::get<0>(prefs)[cat];
+            }
+            for (int site = 0; site < Nsite; site++) {
+                (*sitealloc)[site] = static_cast<unsigned>(std::get<1>(prefs)[site]);
+                assert((*componentaafitnessarray)[site].size() == 20);
+            }
+        }
 
         // occupancy suff stats of site allocations (for resampling weights)
         occupancy = new OccupancySuffStat(Ncat);
@@ -342,15 +410,16 @@ class DatedMutSelModel : public ChainComponent {
 
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
         theta_scale = 1e-5;
-        theta = new CompoundScaledMutationRate(Ntaxa, theta_scale, noderates, nodepopsize);
+        theta =
+            new CompoundScaledMutationRate(Ntaxa, theta_scale, noderates, nodepopsize, *taxonset);
         thetamax = 0.1;
         if (polydata != nullptr) {
             poissonrandomfield =
                 new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
             polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
                 *siteaafitnessarray, *nucmatrix, *theta);
-            sitepolysuffstatbidimarray = new PolySuffStatBidimArray(Nsite, Ntaxa);
-            componentpolysuffstatbidimarray = new PolySuffStatBidimArray(Ncat, Ntaxa);
+            sitepolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Nsite);
+            componentpolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Ncat);
         }
 
         phyloprocess = new PhyloProcess(tree.get(), codondata, branchlength, nullptr,
@@ -391,33 +460,56 @@ class DatedMutSelModel : public ChainComponent {
 
     template <class C>
     void declare_stats(C &t) {
-        t.add("logprior", [this]() { return GetLogPrior(); });
-        t.add("lnL", [this]() { return GetLogLikelihood(); });
+        t.add("lnPrior", [this]() { return GetLogPrior(); });
+        t.add("lnLikelihood", [this]() { return GetLogLikelihood(); });
         // 3x: per coding site (and not per nucleotide site)
-        t.add("blengthmean", [&]() { return branchlength->GetMean(); });
-        t.add("blengthvar", [&]() { return branchlength->GetVar(); });
-        t.add("predicted_dnds", [this]() { return GetPredictedDNDS(); });
-        if (polyprocess != nullptr) { t.add("theta_scale", theta_scale); }
-        t.add("ncluster", [this]() { return GetNcluster(); });
+        t.add("PredictedDNDS", [this]() { return GetPredictedDNDS(); });
+        if (polyprocess != nullptr) {
+            t.add("ThetaScale", theta_scale);
+            for (int taxon = 0; taxon < Ntaxa; taxon++) {
+                t.add("@Theta_" + taxonset->GetTaxon(taxon),
+                    [&]() { return theta->GetTheta(taxon); });
+            }
+        }
+        t.add("Ncluster", [this]() { return GetNcluster(); });
         t.add("kappa", kappa);
         if (baseNcat > 1) {
             t.add("basencluster", [this]() { return GetBaseNcluster(); });
             t.add("basekappa", basekappa);
         }
         for (int i = 0; i < dimension; i++) {
-            t.add("root_" + std::to_string(i), root_multivariate.coeffRef(i));
             for (int j = 0; j <= i; j++) {
-                t.add("cov_" + std::to_string(i) + "_" + std::to_string(j),
+                t.add("Covariance_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
             }
         }
-        t.add("bomegamean", [&]() { return branchscaledpopsize->GetMean(); });
-        t.add("bomegavar", [&]() { return branchscaledpopsize->GetVar(); });
-        t.add("aaent", [this]() { return GetMeanAAEntropy(); });
-        t.add("meanaaconc", [this]() { return GetMeanComponentAAConcentration(); });
-        t.add("aacenterent", [this]() { return GetMeanComponentAAEntropy(); });
-        t.add("statent", [&]() { return Random::GetEntropy(nucstat); });
-        t.add("rrent", [&]() { return Random::GetEntropy(nucrelrate); });
+        for (int i = 0; i < dimension; i++) {
+            t.add("Root_" + std::to_string(i), root_multivariate.coeffRef(i));
+        }
+
+        t.add("BranchRatesMean", [this]() { return branchrates->GetMean(); });
+        t.add("BranchRatesVar", [this]() { return branchrates->GetVar(); });
+        t.add("BranchLengthSum", [this]() { return branchlength->GetSum(); });
+        t.add("BranchLengthMean", [this]() { return branchlength->GetMean(); });
+        t.add("BranchLengthVar", [this]() { return branchlength->GetVar(); });
+        t.add("BranchPopSizesMean", [this]() { return branchpopsize->GetMean(); });
+        t.add("BranchPopSizesVar", [this]() { return branchpopsize->GetVar(); });
+        for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
+            t.add("*NodePopSize_" + tree->node_name(node), (*nodepopsize)[node]);
+            t.add("*NodeRate_" + tree->node_name(node), (*noderates)[node]);
+            if (!tree->is_root(node)) {
+                t.add("*BranchTime_" + tree->node_name(node),
+                    (*chronogram)[tree->branch_index(node)]);
+                t.add("*BranchLength_" + tree->node_name(node),
+                    (*branchlength)[tree->branch_index(node)]);
+            }
+        }
+        t.add("MeanAAEntropy", [this]() { return GetMeanAAEntropy(); });
+        t.add(
+            "MeanComponentAAConcentration", [this]() { return GetMeanComponentAAConcentration(); });
+        t.add("MeanComponentAAEntropy", [this]() { return GetMeanComponentAAEntropy(); });
+        t.add("NucStatEntropy", [&]() { return Random::GetEntropy(nucstat); });
+        t.add("NucRateEntropy", [&]() { return Random::GetEntropy(nucrelrate); });
     }
 
     //-------------------
@@ -481,7 +573,6 @@ class DatedMutSelModel : public ChainComponent {
     void UpdateBranches() {
         chronogram->Update();
         branchpopsize->Update();
-        branchscaledpopsize->Update();
         branchrates->Update();
         branchlength->Update();
     }
@@ -544,14 +635,16 @@ class DatedMutSelModel : public ChainComponent {
         total += RootMultivariateLogPrior();
         total += NucRatesLogPrior();
 
-        if (baseNcat > 1) {
-            total += BaseStickBreakingHyperLogPrior();
-            total += BaseStickBreakingLogPrior();
+        if (!clamp_profiles) {
+            if (baseNcat > 1) {
+                total += BaseStickBreakingHyperLogPrior();
+                total += BaseStickBreakingLogPrior();
+            }
+            total += BaseLogPrior();
+            total += StickBreakingHyperLogPrior();
+            total += StickBreakingLogPrior();
+            total += AALogPrior();
         }
-        total += BaseLogPrior();
-        total += StickBreakingHyperLogPrior();
-        total += StickBreakingLogPrior();
-        total += AALogPrior();
 
         if (polyprocess != nullptr) { total += ThetaLogPrior(); }
         return total;
@@ -576,8 +669,7 @@ class DatedMutSelModel : public ChainComponent {
     double RootMultivariateLogPrior() const { return node_multivariate->GetLogProb(tree->root()); }
 
     //! log prior of hyperparameters of branch rates (brownian process)
-    double RootMultivariateHyperLogPrior() const { return -root_multivariate.sum(); }
-
+    double RootMultivariateHyperLogPrior() const { return 0.0; }
 
     //! log prior over theta
     double ThetaLogPrior() const {
@@ -701,9 +793,26 @@ class DatedMutSelModel : public ChainComponent {
         if (polyprocess != nullptr) {
             double tot = 0;
             for (int taxon = 0; taxon < Ntaxa; taxon++) {
-                tot += componentpolysuffstatbidimarray->GetVal(k, taxon).GetLogProb(
+                tot += componentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
                     *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix,
                     theta->GetTheta(taxon));
+            }
+            return tot;
+        } else {
+            return 0.0;
+        }
+    }
+
+    //! return log prob only at the tips due to polymorphism of the substitution
+    //! mapping, over sites allocated to component k of the mixture
+    double TaxonPolySuffStatLogProb(int taxon) const {
+        // sum over all sites allocated to component k
+        if (polyprocess != nullptr) {
+            double tot = 0;
+            double d_theta = theta->GetTheta(taxon);
+            for (int k = 0; k < Ncat; k++) {
+                tot += componentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
+                    *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix, d_theta);
             }
             return tot;
         } else {
@@ -722,9 +831,9 @@ class DatedMutSelModel : public ChainComponent {
     //! component k of the mixture
     double ComponentPathSuffStatLogProb(int k) const {
         double loglk = 0.0;
-        for (int cond{0}; cond < Nbranch; cond++) {
-            loglk += componentpathsuffstatbidimarray->GetVal(cond, k).GetLogProb(
-                branchcomponentcodonmatrixarray->GetVal(cond, k));
+        for (int branch{0}; branch < Nbranch; branch++) {
+            loglk += componentpathsuffstatbidimarray->GetVal(branch, k).GetLogProb(
+                branchcomponentcodonmatrixarray->GetVal(branch, k));
         }
         loglk += ComponentPolySuffStatLogProb(k);
         return loglk;
@@ -742,16 +851,17 @@ class DatedMutSelModel : public ChainComponent {
     // Node ages and branch rates
     //! \brief log prob to be recomputed when moving age of focal node
     double LocalNodeAgeLogProb(Tree::NodeIndex node) const {
-        double tot = 0;
-        tot += LocalNodeMultivariateLogPrior(node);
-        tot += LocalBranchLengthSuffStatLogProb(node);
-        return tot;
+        return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
     }
 
     //! \brief log prob to be recomputed when moving branch rates (brownian process) around of focal
     //! node
     double LocalNodeRatesLogProb(Tree::NodeIndex node) const {
-        return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+        double tot = LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+        if (tree->is_leaf(node) and polyprocess != nullptr) {
+            tot += TaxonPolySuffStatLogProb(taxonset->GetTaxonIndex(tree->node_name(node)));
+        }
+        return tot;
     }
 
     //! \brief log prob factor (without prior) to be recomputed when moving age of focal node, or
@@ -793,6 +903,9 @@ class DatedMutSelModel : public ChainComponent {
         if (!tree->is_root(node)) {
             // for the branch attached to the node
             tot += NodePopSizeSuffStatLogProb(tree->branch_index(node));
+        }
+        if (tree->is_leaf(node) and polyprocess != nullptr) {
+            tot += TaxonPolySuffStatLogProb(taxonset->GetTaxonIndex(tree->node_name(node)));
         }
         assert(tot != 0);
         return tot;
@@ -891,14 +1004,16 @@ class DatedMutSelModel : public ChainComponent {
 
             CollectScatterSuffStat();
             SamplePrecisionMatrix();
-            MoveRootMultivariate(1.0, 3);
-            MoveRootMultivariate(0.1, 3);
+            // MoveRootMultivariate(1.0, 3);
+            // MoveRootMultivariate(0.1, 3);
             UpdateMatrices();
 
             if (polyprocess != nullptr) { MoveTheta(); }
 
-            MoveAAMixture(3);
-            MoveBase(3);
+            if (!clamp_profiles) {
+                MoveAAMixture(3);
+                MoveBase(3);
+            }
         }
     }
 
@@ -1441,9 +1556,9 @@ class DatedMutSelModel : public ChainComponent {
         double mean = 0;
         for (int k = 0; k < Ncat; k++) {
             if (occupancy->GetVal(k)) {
-                for (int cond{0}; cond < Nbranch; cond++) {
+                for (int branch{0}; branch < Nbranch; branch++) {
                     mean += occupancy->GetVal(k) *
-                            branchcomponentcodonmatrixarray->GetVal(cond, k).GetPredictedDNDS();
+                            branchcomponentcodonmatrixarray->GetVal(branch, k).GetPredictedDNDS();
                 }
             }
         }
@@ -1458,7 +1573,7 @@ class DatedMutSelModel : public ChainComponent {
 };
 
 std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m) {
-    std::string model_name, datafile, treefile;
+    std::string model_name, datafile, treefile, profiles;
     int Ncat, baseNcat;
     bool condition_aware, polymorphism_aware;
 
@@ -1468,11 +1583,11 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
         exit(1);
     }
 
-    is >> datafile >> treefile;
+    is >> datafile >> treefile >> profiles;
     is >> Ncat >> baseNcat;
     is >> condition_aware >> polymorphism_aware;
     m.reset(new DatedMutSelModel(
-        datafile, treefile, Ncat, baseNcat, condition_aware, polymorphism_aware));
+        datafile, treefile, profiles, Ncat, baseNcat, condition_aware, polymorphism_aware));
     Tracer tracer{*m, &DatedMutSelModel::declare_model};
     tracer.read_line(is);
     m->Update();
@@ -1484,6 +1599,8 @@ std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m) {
     os << "DatedMutSelModel" << '\t';
     os << m.datafile << '\t';
     os << m.treefile << '\t';
+    if (m.profiles.empty()) { m.profiles = "Null"; }
+    os << m.profiles << '\t';
     os << m.Ncat << '\t';
     os << m.baseNcat << '\t';
     os << m.condition_aware << '\t';
