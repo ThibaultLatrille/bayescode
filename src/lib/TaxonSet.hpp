@@ -1,5 +1,4 @@
-#ifndef TAXONSET_H
-#define TAXONSET_H
+#pragma once
 
 #include <iostream>
 #include <map>
@@ -62,5 +61,3 @@ inline int TaxonSet::GetTaxonIndex(std::string intaxon) const {
     }
     return i->second - 1;
 }
-
-#endif  // TAXONSET_H

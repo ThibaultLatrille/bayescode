@@ -1,6 +1,4 @@
-
-#ifndef IIDDIR_H
-#define IIDDIR_H
+#pragma once
 
 #include "Array.hpp"
 #include "Random.hpp"
@@ -258,7 +256,7 @@ class MultiDirichlet : public SimpleArray<std::vector<double>> {
           dim(incenterarray->GetVal(0).size()),
           centerarray(incenterarray),
           concentrationarray(inconcentrationarray),
-          weightarray(0) {
+          weightarray(nullptr) {
         if (centerarray->GetSize() != concentrationarray->GetSize()) {
             std::cerr << "error in multi dirichlet: center and concentration arrays "
                          "should have same size\n";
@@ -274,8 +272,8 @@ class MultiDirichlet : public SimpleArray<std::vector<double>> {
     MultiDirichlet(const Selector<std::vector<double>> *inweightarray)
         : SimpleArray<std::vector<double>>(inweightarray->GetSize()),
           dim(inweightarray->GetVal(0).size()),
-          centerarray(0),
-          concentrationarray(0),
+          centerarray(nullptr),
+          concentrationarray(nullptr),
           weightarray(inweightarray) {
         for (int i = 0; i < GetSize(); i++) { (*this)[i].assign(dim, 0); }
         Sample();
@@ -383,5 +381,3 @@ class MultiDirichlet : public SimpleArray<std::vector<double>> {
     const Selector<double> *concentrationarray;
     const Selector<std::vector<double>> *weightarray;
 };
-
-#endif
