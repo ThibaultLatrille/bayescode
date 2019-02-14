@@ -50,6 +50,10 @@ class AnnotatedTree {
     virtual std::size_t nb_nodes() const = 0;
     virtual TagValue tag(NodeIndex, TagName) const = 0;
 
+    virtual std::string as_string() const = 0;
+    virtual std::vector<std::string> descendant_leaves(NodeIndex) const = 0;
+    virtual bool operator==(const AnnotatedTree& other) const = 0;
+
     virtual ~AnnotatedTree() = default;
 };
 
@@ -96,6 +100,85 @@ class DoubleListAnnotatedTree : public AnnotatedTree {
         } else {
             return "";
         }
+    }
+
+    std::string recursive_string(NodeIndex node) const {
+        std::string newick;
+
+        if (not children(node).empty()) {
+            // It's an internal node
+            newick += "(";
+            for (auto const child : children(node)) { newick += recursive_string(child) + ","; };
+            newick.pop_back();
+            newick += ")";
+        }
+        auto node_annotation = nodes_.at(node);
+        if (node_annotation.count("name") != 0) {
+            newick += nodes_.at(node).at("name");
+            node_annotation.erase("name");
+        }
+        if (node_annotation.count("length") != 0) {
+            newick += ":" + nodes_.at(node).at("length");
+            node_annotation.erase("length");
+        }
+        if (not node_annotation.empty()) {
+            newick += "[&&NHX";
+            for (auto& it : node_annotation) { newick += ":" + it.first + "=" + it.second; }
+            newick += "]";
+        }
+        return newick;
+    }
+
+    std::string as_string() const final { return recursive_string(root()) + "; "; }
+
+    std::vector<std::string> descendant_leaves(NodeIndex node) const final {
+        std::vector<std::string> leaves(0);
+        if (children(node).empty()) {
+            leaves.emplace_back(tag(node, "name"));
+        } else {
+            for (auto const& child : children(node)) {
+                auto v2 = descendant_leaves(child);
+                if (not v2.empty()) { leaves.insert(leaves.end(), v2.begin(), v2.end()); }
+            }
+        }
+        return leaves;
+    }
+
+    int recursive_diff(NodeIndex node, const AnnotatedTree& other, NodeIndex other_node) const {
+        int diff = 0;
+
+        if (children(node).size() != other.children(other_node).size()) {
+            diff++;
+        } else {
+            for (auto const& child : children(node)) {
+                auto child_leaves = descendant_leaves(child);
+                std::sort(child_leaves.begin(), child_leaves.end());
+                bool no_counterpart = true;
+                for (auto const& other_child : other.children(other_node)) {
+                    auto other_leaves = other.descendant_leaves(other_child);
+                    std::sort(other_leaves.begin(), other_leaves.end());
+
+                    if (tag(child, "name") == other.tag(other_child, "name") and
+                        tag(child, "length") == other.tag(other_child, "length") and
+                        child_leaves == other_leaves) {
+                        no_counterpart = false;
+                        diff += recursive_diff(child, other, other_child);
+                    }
+                }
+                if (no_counterpart) { diff++; }
+            }
+        }
+
+        for (auto& it : nodes_.at(node)) {
+            if (it.second != other.tag(other_node, it.first)) { diff++; };
+        }
+
+        return diff;
+    }
+
+    bool operator==(const AnnotatedTree& other) const final {
+        if (nb_nodes() != other.nb_nodes()) { return false; };
+        return recursive_diff(root(), other, other.root()) == 0;
     }
 };
 
@@ -221,6 +304,10 @@ class NHXParser : public TreeParser {
         switch (next_token.first) {
             case Colon: node_length(number, parent); break;
             case NHXOpen: data(number, parent); break;
+            case Identifier:
+                tree.nodes_[number]["name"] = next_token.second;
+                node_name(number, parent);
+                break;
             default: node_end(parent);
         }
     }
