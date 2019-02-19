@@ -136,26 +136,6 @@ class BranchwiseProduct : public SimpleBranchArray<double> {
         (*this)[branch] = factor1.GetVal(branch) * factor2.GetVal(branch);
     }
 
-    //! get sum over the branch array
-    double GetSum() const {
-        double m1 = 0;
-        for (int i = 0; i < GetNbranch(); i++) { m1 += GetVal(i); }
-        return m1;
-    }
-
-    //! get mean over the branch array
-    double GetMean() const { return GetSum() / GetNbranch(); }
-
-    //! get variance over the branch array
-    double GetVar() const {
-        double m1 = GetMean();
-        double m2 = 0;
-        for (int i = 0; i < GetNbranch(); i++) { m2 += GetVal(i) * GetVal(i); }
-        m2 /= GetNbranch();
-        m2 -= m1 * m1;
-        return m2;
-    }
-
   private:
     const BranchSelector<double> &factor1;
     const BranchSelector<double> &factor2;

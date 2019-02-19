@@ -113,7 +113,6 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
         }
         if (push) {
             fitness_profiles.push_back(fitness_profil);
-        } else {
             alloc.push_back(alloc.size());
         }
     }
@@ -125,6 +124,7 @@ class DatedMutSelModel : public ChainComponent {
 
     bool condition_aware;
     bool polymorphism_aware;
+    unsigned precision;
     bool clamp_profiles = false;
 
     std::unique_ptr<const Tree> tree;
@@ -149,7 +149,6 @@ class DatedMutSelModel : public ChainComponent {
     double invert_whishart_kappa;
     // Covariance matrix
     EMatrix precision_matrix;
-    EVector root_multivariate;
     NodeMultivariateProcess *node_multivariate;
 
     // Branch rates (brownian process)
@@ -258,12 +257,13 @@ class DatedMutSelModel : public ChainComponent {
     //! default: 1)
     //! - polymorphism_aware: boolean to force using polymorphism data
     DatedMutSelModel(std::string indatafile, std::string intreefile, std::string inprofiles,
-        int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware)
+        int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware, unsigned inprecision)
         : datafile(indatafile),
           treefile(intreefile),
           profiles(inprofiles),
           condition_aware(incondition_aware),
           polymorphism_aware(inpolymorphism_aware),
+          precision(inprecision),
           baseNcat(inbaseNcat),
           Ncat(inNcat) {
         data = new FileSequenceAlignment(datafile);
@@ -307,12 +307,10 @@ class DatedMutSelModel : public ChainComponent {
         dimension = 2;
         invert_whishart_df = dimension + 1;
         invert_whishart_kappa = 1.0;
-        root_multivariate = EVector::Constant(dimension, 0.0);
-        root_multivariate(1) = -1.0;
         precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
 
         node_multivariate =
-            new NodeMultivariateProcess(*chronogram, precision_matrix, root_multivariate);
+            new NodeMultivariateProcess(*chronogram, precision_matrix, dimension);
 
         // Branch omega (brownian process)
         nodepopsize = new NodeProcess(*node_multivariate, 0);
@@ -376,13 +374,18 @@ class DatedMutSelModel : public ChainComponent {
 
         // site allocations to the mixture (multinomial allocation)
         sitealloc = new MultinomialAllocationVector(Nsite, weight->GetArray());
+
+        // selector, specifying which aa fitness array should be used for each site
+        siteaafitnessarray =
+            new MixtureSelector<std::vector<double>>(componentaafitnessarray, sitealloc);
+
         if (clamp_profiles) {
             for (int cat = 0; cat < Ncat; cat++) {
                 (*componentaafitnessarray)[cat] = std::get<0>(prefs)[cat];
             }
             for (int site = 0; site < Nsite; site++) {
                 (*sitealloc)[site] = static_cast<unsigned>(std::get<1>(prefs)[site]);
-                assert((*componentaafitnessarray)[site].size() == 20);
+                assert(siteaafitnessarray->GetVal(site).size() == 20);
             }
         }
 
@@ -403,10 +406,6 @@ class DatedMutSelModel : public ChainComponent {
         // sub matrices for root, across sites
         rootsitecodonmatrixarray =
             new RootComponentMatrixSelector<SubMatrix>(rootcomponentcodonmatrixarray, sitealloc);
-
-        // selector, specifying which aa fitness array should be used for each site
-        siteaafitnessarray =
-            new MixtureSelector<std::vector<double>>(componentaafitnessarray, sitealloc);
 
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
         theta_scale = 1e-5;
@@ -441,7 +440,6 @@ class DatedMutSelModel : public ChainComponent {
         t.add("nodeages", *nodeages);
         t.add("node_multivariate", *node_multivariate);
         t.add("covmatrix", precision_matrix);
-        t.add("root_multivariate", root_multivariate);
         t.add("invert_whishart_kappa", invert_whishart_kappa);
         t.add("invert_whishart_df", invert_whishart_df);
         t.add("nucrelrate", nucrelrate);
@@ -467,8 +465,7 @@ class DatedMutSelModel : public ChainComponent {
         if (polyprocess != nullptr) {
             t.add("ThetaScale", theta_scale);
             for (int taxon = 0; taxon < Ntaxa; taxon++) {
-                t.add("@Theta_" + taxonset->GetTaxon(taxon),
-                    [&]() { return theta->GetTheta(taxon); });
+                t.add("*Theta_" + taxonset->GetTaxon(taxon), (*theta)[taxon]);
             }
         }
         t.add("Ncluster", [this]() { return GetNcluster(); });
@@ -482,9 +479,6 @@ class DatedMutSelModel : public ChainComponent {
                 t.add("Covariance_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
             }
-        }
-        for (int i = 0; i < dimension; i++) {
-            t.add("Root_" + std::to_string(i), root_multivariate.coeffRef(i));
         }
 
         t.add("BranchRatesMean", [this]() { return branchrates->GetMean(); });
@@ -613,6 +607,7 @@ class DatedMutSelModel : public ChainComponent {
         UpdateBaseOccupancies();
         UpdateOccupancies();
         UpdateMatrices();
+        theta->Update();
         ResampleSub(1.0);
     }
 
@@ -963,6 +958,7 @@ class DatedMutSelModel : public ChainComponent {
     void ResampleSub(double frac) {
         UpdateMatrices();
         phyloprocess->Move(frac);
+        theta->Update();
         CheckMapping();
     }
 
@@ -1004,8 +1000,6 @@ class DatedMutSelModel : public ChainComponent {
 
             CollectScatterSuffStat();
             SamplePrecisionMatrix();
-            // MoveRootMultivariate(1.0, 3);
-            // MoveRootMultivariate(0.1, 3);
             UpdateMatrices();
 
             if (polyprocess != nullptr) { MoveTheta(); }
@@ -1021,23 +1015,6 @@ class DatedMutSelModel : public ChainComponent {
     void SamplePrecisionMatrix() {
         scattersuffstat->SamplePrecisionMatrix(
             precision_matrix, invert_whishart_df, invert_whishart_kappa);
-    };
-
-    void MoveRootMultivariate(double tuning, int nrep) {
-        for (int rep = 0; rep < nrep; rep++) {
-            for (int dim = 0; dim < dimension; dim++) {
-                double logratio = -RootLogProb();
-
-                double m = tuning * (Random::Uniform() - 0.5);
-
-                root_multivariate(dim) += m;
-
-                logratio += RootLogProb();
-
-                bool accept = (log(Random::Uniform()) < logratio);
-                if (!accept) { root_multivariate(dim) -= m; }
-            }
-        }
     };
 
     //! MH moves on branch ages
@@ -1097,7 +1074,9 @@ class DatedMutSelModel : public ChainComponent {
     void MoveNodePopSize(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
-                MoveNodePopSize(node, tuning);
+                if (!tree->is_root(node)) {
+                    MoveNodePopSize(node, tuning);
+                }
             }
         }
     }
@@ -1576,6 +1555,7 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
     std::string model_name, datafile, treefile, profiles;
     int Ncat, baseNcat;
     bool condition_aware, polymorphism_aware;
+    unsigned precision;
 
     is >> model_name;
     if (model_name != "DatedMutSelModel") {
@@ -1585,9 +1565,9 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
 
     is >> datafile >> treefile >> profiles;
     is >> Ncat >> baseNcat;
-    is >> condition_aware >> polymorphism_aware;
+    is >> condition_aware >> polymorphism_aware >> precision;
     m.reset(new DatedMutSelModel(
-        datafile, treefile, profiles, Ncat, baseNcat, condition_aware, polymorphism_aware));
+        datafile, treefile, profiles, Ncat, baseNcat, condition_aware, polymorphism_aware, precision));
     Tracer tracer{*m, &DatedMutSelModel::declare_model};
     tracer.read_line(is);
     m->Update();
@@ -1605,6 +1585,7 @@ std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m) {
     os << m.baseNcat << '\t';
     os << m.condition_aware << '\t';
     os << m.polymorphism_aware << '\t';
+    os << m.precision << '\t';
     tracer.write_line(os);
     return os;
 }

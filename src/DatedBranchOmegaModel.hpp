@@ -49,7 +49,6 @@ class DatedBranchOmegaModel : public ChainComponent {
     double invert_whishart_kappa;
     // Covariance matrix
     EMatrix precision_matrix;
-    EVector root_multivariate;
     NodeMultivariateProcess *node_multivariate;
 
     // Branch rates (brownian process)
@@ -134,11 +133,10 @@ class DatedBranchOmegaModel : public ChainComponent {
         dimension = 2;
         invert_whishart_df = dimension + 1;
         invert_whishart_kappa = 1.0;
-        root_multivariate = EVector::Constant(dimension, -1.0);
         precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
 
         node_multivariate =
-            new NodeMultivariateProcess(*chronogram, precision_matrix, root_multivariate);
+            new NodeMultivariateProcess(*chronogram, precision_matrix, dimension);
 
         // Branch rates (brownian process)
         noderates = new NodeProcess(*node_multivariate, 0);
@@ -194,7 +192,6 @@ class DatedBranchOmegaModel : public ChainComponent {
         t.add("nodeages", *nodeages);
         t.add("node_multivariate", *node_multivariate);
         t.add("covmatrix", precision_matrix);
-        t.add("root_multivariate", root_multivariate);
         t.add("invert_whishart_kappa", invert_whishart_kappa);
         t.add("invert_whishart_df", invert_whishart_df);
     }
@@ -208,7 +205,6 @@ class DatedBranchOmegaModel : public ChainComponent {
         t.add("blengthmean", [&]() { return branchlength->GetMean(); });
         t.add("blengthvar", [&]() { return branchlength->GetVar(); });
         for (int i = 0; i < dimension; i++) {
-            t.add("root_" + std::to_string(i), root_multivariate.coeffRef(i));
             for (int j = 0; j <= i; j++) {
                 t.add("cov_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
@@ -337,7 +333,6 @@ class DatedBranchOmegaModel : public ChainComponent {
     double GetLogPrior() const {
         double total = 0;
         total += NodeMultivariateLogPrior();
-        total += RootMultivariateLogPrior();
         total += NucRatesLogPrior();
         return total;
     }
@@ -358,12 +353,6 @@ class DatedBranchOmegaModel : public ChainComponent {
     double LocalNodeMultivariateLogPrior(Tree::NodeIndex node) const {
         return node_multivariate->GetLocalLogProb(node);
     }
-
-    //! log prior of
-    double RootMultivariateLogPrior() const { return node_multivariate->GetLogProb(tree->root()); }
-
-    //! log prior of hyperparameters of branch rates (brownian process)
-    double RootMultivariateHyperLogPrior() const { return -root_multivariate.sum(); }
 
     // Nucleotide rates prior
     //! log prior over nucleotide relative exchangeabilities (nucrelrate) and eq.
@@ -488,11 +477,6 @@ class DatedBranchOmegaModel : public ChainComponent {
         return omegapathsuffstatarray->GetVal(branch).GetLogProb(branchomega->GetVal(branch));
     }
 
-    //! Root log prob
-    double RootLogProb() const {
-        return RootMultivariateHyperLogPrior() + RootMultivariateLogPrior();
-    }
-
     // Nucleotide rates
     //! \brief log prob factor to be recomputed when moving nucleotide mutation
     //! rate parameters (nucrelrate and nucstat)
@@ -544,8 +528,6 @@ class DatedBranchOmegaModel : public ChainComponent {
 
             CollectScatterSuffStat();
             SamplePrecisionMatrix();
-            MoveRootMultivariate(1.0, 3);
-            MoveRootMultivariate(0.1, 3);
             TouchMatrices();
         }
     }
@@ -553,23 +535,6 @@ class DatedBranchOmegaModel : public ChainComponent {
     void SamplePrecisionMatrix() {
         scattersuffstat->SamplePrecisionMatrix(
             precision_matrix, invert_whishart_df, invert_whishart_kappa);
-    };
-
-    void MoveRootMultivariate(double tuning, int nrep) {
-        for (int rep = 0; rep < nrep; rep++) {
-            for (int dim = 0; dim < dimension; dim++) {
-                double logratio = -RootLogProb();
-
-                double m = tuning * (Random::Uniform() - 0.5);
-
-                root_multivariate(dim) += m;
-
-                logratio += RootLogProb();
-
-                bool accept = (log(Random::Uniform()) < logratio);
-                if (!accept) { root_multivariate(dim) -= m; }
-            }
-        }
     };
 
     //! MH moves on branch ages
@@ -629,7 +594,9 @@ class DatedBranchOmegaModel : public ChainComponent {
     void MoveNodeOmega(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
-                MoveNodeOmega(node, tuning);
+                if (!tree->is_root(node)){
+                    MoveNodeOmega(node, tuning);
+                }
             }
         }
     }

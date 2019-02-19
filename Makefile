@@ -102,6 +102,8 @@ run-app-tests: all
 	_build/datedmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/datedmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel restart =====================================================\e[0m"
 	_build/datedmutsel _test/datedmutsel_gal4
+	@echo "\n\e[35m\e[1m== Dated MutSel read ========================================================\e[0m"
+	_build/readdatedmutsel --ss _test/datedmutsel_gal4
 
 .PHONY: run-multigeneglobom-test
 run-multigeneglobom-test: all

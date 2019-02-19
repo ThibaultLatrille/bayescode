@@ -5,6 +5,7 @@
 #include "Chronogram.hpp"
 #include "NodeArray.hpp"
 #include "Random.hpp"
+#include <cmath>
 
 /**
  * \brief A brownian univariate NodeProcess
@@ -19,12 +20,11 @@
 class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
   public:
     NodeMultivariateProcess(
-        const Chronogram &inchrono, const EMatrix &inprecision_matrix, const EVector &inroot_mean)
+        const Chronogram &inchrono, const EMatrix &inprecision_matrix, int indimensions)
         : SimpleNodeArray<EVector>(inchrono.GetTree()),
           chronogram(inchrono),
-          dimensions(inroot_mean.size()),
-          precision_matrix(inprecision_matrix),
-          root_mean(inroot_mean) {
+          dimensions(indimensions),
+          precision_matrix(inprecision_matrix) {
         for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(GetTree().nb_nodes()); node++) {
             (*this)[node] = EVector::Zero(dimensions);
         }
@@ -35,7 +35,7 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
     void Sample() {
         (*this)[GetTree().root()].Zero(dimensions);
         for (int dim = 0; dim < dimensions; dim++) {
-            (*this)[GetTree().root()](dim) = root_mean(dim) + GetSigma(dim) * Random::sNormal();
+            (*this)[GetTree().root()](dim) = 0;
         };
         SampleRecursive(GetTree().root());
     }
@@ -66,17 +66,18 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
 
     //! get log prob for a given node
     double GetLogProb(Tree::NodeIndex node) const {
-        return Random::logNormalDensity(GetContrast(node), precision_matrix);
+        if (GetTree().is_root(node)) {
+            return 0.0;
+        } else {
+            return Random::logNormalDensity(GetContrast(node), precision_matrix);
+        }
     }
 
     //! get contrast
     EVector GetContrast(Tree::NodeIndex node) const {
-        if (GetTree().is_root(node)) {
-            return this->GetVal(node) - root_mean;
-        } else {
-            return (this->GetVal(node) - this->GetVal(GetTree().parent(node))) /
+        assert(!GetTree().is_root(node));
+        return (this->GetVal(node) - this->GetVal(GetTree().parent(node))) /
                    sqrt(chronogram.GetVal(chronogram.GetTree().branch_index(node)));
-        }
     }
 
     //! get local log prob for a given node
@@ -99,7 +100,6 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
     const Chronogram &chronogram;
     int dimensions;
     const EMatrix &precision_matrix;
-    const EVector &root_mean;
 };
 
 class NodeProcess {
