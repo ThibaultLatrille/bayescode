@@ -30,8 +30,8 @@ void AAMutSelOmegaCodonSubMatrix::ComputeArray(int i) const {
 
                 double deltaS = 0;
                 if (!Synonymous(i, j)) {
-                    deltaS = log(GetFitness(GetCodonStateSpace()->Translation(j))) -
-                             log(GetFitness(GetCodonStateSpace()->Translation(i)));
+                    deltaS = GetLogFitness(GetCodonStateSpace()->Translation(j)) -
+                             GetLogFitness(GetCodonStateSpace()->Translation(i));
                 }
                 if ((fabs(deltaS)) < 1e-30) {
                     Q(i, j) *= 1 + deltaS / 2;
@@ -86,8 +86,8 @@ double AAMutSelOmegaCodonSubMatrix::GetPredictedDNDS() const {
 
                         double nucrate = (*NucMatrix)(a, b);
 
-                        double deltaS = log(GetFitness(GetCodonStateSpace()->Translation(j))) -
-                                        log(GetFitness(GetCodonStateSpace()->Translation(i)));
+                        double deltaS = GetLogFitness(GetCodonStateSpace()->Translation(j)) -
+                                        GetLogFitness(GetCodonStateSpace()->Translation(i));
                         double pfix = 1.0;
                         if ((fabs(deltaS)) < 1e-30) {
                             pfix = 1 + deltaS / 2;

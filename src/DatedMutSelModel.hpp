@@ -126,6 +126,7 @@ class DatedMutSelModel : public ChainComponent {
     bool polymorphism_aware;
     unsigned precision;
     bool clamp_profiles = false;
+    bool debug = true;
 
     std::unique_ptr<const Tree> tree;
 
@@ -227,14 +228,16 @@ class DatedMutSelModel : public ChainComponent {
     PolyProcess *polyprocess{nullptr};
     PoissonRandomField *poissonrandomfield{nullptr};
 
-    PathSuffStatBidimArray *sitepathsuffstatbidimarray;
-    PathSuffStatBidimArray *componentpathsuffstatbidimarray;
+    PathSuffStatBidimArray *branchcomponentpathsuffstatbidimarray;
+    PathSuffStatBidimArray *branchsitepathsuffstatbidimarray;
 
-    PolySuffStatBidimArray *sitepolysuffstatbidimarray{nullptr};
-    PolySuffStatBidimArray *componentpolysuffstatbidimarray{nullptr};
+    PolySuffStatBidimArray *taxoncomponentpolysuffstatbidimarray{nullptr};
+    PolySuffStatBidimArray *taxonsitepolysuffstatbidimarray{nullptr};
 
-    PoissonSuffStatBranchArray *lengthpathsuffstatarray;
+    PoissonSuffStatBranchArray *branchlengthpathsuffstatarray;
     ScatterSuffStat *scattersuffstat;
+
+    SimpleBranchArray<double> *branchdnds;
 
   public:
     friend std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m);
@@ -257,15 +260,18 @@ class DatedMutSelModel : public ChainComponent {
     //! default: 1)
     //! - polymorphism_aware: boolean to force using polymorphism data
     DatedMutSelModel(std::string indatafile, std::string intreefile, std::string inprofiles,
-        int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware, unsigned inprecision)
+        int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware,
+        unsigned inprecision, bool indebug)
         : datafile(indatafile),
           treefile(intreefile),
           profiles(inprofiles),
           condition_aware(incondition_aware),
           polymorphism_aware(inpolymorphism_aware),
           precision(inprecision),
+          debug(indebug),
           baseNcat(inbaseNcat),
           Ncat(inNcat) {
+        if (debug) { std::cout << "Debugging mode activated (slower)." << std::endl; }
         data = new FileSequenceAlignment(datafile);
         codondata = new CodonSequenceAlignment(data, true);
 
@@ -298,7 +304,7 @@ class DatedMutSelModel : public ChainComponent {
         tree = make_from_parser(parser);
 
         Nbranch = tree->nb_branches();
-
+        branchdnds = new SimpleBranchArray<double>(*tree, 0.0);
         // Node ages
         nodeages = new NodeAges(*tree);
         // Chronogram (diff between node ages)
@@ -309,8 +315,7 @@ class DatedMutSelModel : public ChainComponent {
         invert_whishart_kappa = 1.0;
         precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
 
-        node_multivariate =
-            new NodeMultivariateProcess(*chronogram, precision_matrix, dimension);
+        node_multivariate = new NodeMultivariateProcess(*chronogram, precision_matrix, dimension);
 
         // Branch omega (brownian process)
         nodepopsize = new NodeProcess(*node_multivariate, 0);
@@ -322,7 +327,6 @@ class DatedMutSelModel : public ChainComponent {
 
         // Branch lengths (product of branch rates and chronogram)
         branchlength = new BranchwiseProduct(*chronogram, *branchrates);
-
 
         nucrelratehypercenter.assign(Nrr, 1.0 / Nrr);
         nucrelratehyperinvconc = 1.0 / Nrr;
@@ -417,18 +421,18 @@ class DatedMutSelModel : public ChainComponent {
                 new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
             polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
                 *siteaafitnessarray, *nucmatrix, *theta);
-            sitepolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Nsite);
-            componentpolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Ncat);
+            taxoncomponentpolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Ncat);
+            taxonsitepolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Nsite);
         }
 
         phyloprocess = new PhyloProcess(tree.get(), codondata, branchlength, nullptr,
             branchsitecodonmatrixarray, rootsitecodonmatrixarray, polyprocess);
         phyloprocess->Unfold();
 
-        sitepathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Nsite);
-        componentpathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Ncat);
+        branchcomponentpathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Ncat);
+        branchsitepathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Nsite);
         scattersuffstat = new ScatterSuffStat(*tree);
-        lengthpathsuffstatarray = new PoissonSuffStatBranchArray(*tree);
+        branchlengthpathsuffstatarray = new PoissonSuffStatBranchArray(*tree);
     }
 
     virtual ~DatedMutSelModel() = default;
@@ -492,6 +496,8 @@ class DatedMutSelModel : public ChainComponent {
             t.add("*NodePopSize_" + tree->node_name(node), (*nodepopsize)[node]);
             t.add("*NodeRate_" + tree->node_name(node), (*noderates)[node]);
             if (!tree->is_root(node)) {
+                t.add("*BranchdNdS_" + tree->node_name(node),
+                    (*branchdnds)[tree->branch_index(node)]);
                 t.add("*BranchTime_" + tree->node_name(node),
                     (*chronogram)[tree->branch_index(node)]);
                 t.add("*BranchLength_" + tree->node_name(node),
@@ -592,30 +598,41 @@ class DatedMutSelModel : public ChainComponent {
     //! Update needed when the omega (NodeProcess) of the focal node is changed.
     void UpdateLocalBranchPopSize(Tree::NodeIndex node) {
         branchpopsize->UpdateLocal(node);
-        if (!tree->is_root(node)) {
-            Tree::BranchIndex branch = tree->branch_index(node);
-            branchcomponentcodonmatrixarray->SetRowNe(branch, branchpopsize->GetVal(branch));
-            branchcomponentcodonmatrixarray->CorruptRowCodonMatrices(branch);
-        } else {
+
+        if (tree->is_root(node)) {
             rootcomponentcodonmatrixarray->SetNe(nodepopsize->GetExpVal(tree->root()));
             rootcomponentcodonmatrixarray->UpdateCodonMatrices();
+        } else {
+            UpdateBranchPopSize(node);
         }
+        for (Tree::NodeIndex const &child : tree->children(node)) { UpdateBranchPopSize(child); }
     }
 
-    void Update() {
+    void UpdateBranchPopSize(Tree::NodeIndex node) {
+        Tree::BranchIndex branch = tree->branch_index(node);
+        branchcomponentcodonmatrixarray->SetRowNe(branch, branchpopsize->GetVal(branch));
+        branchcomponentcodonmatrixarray->CorruptRowCodonMatrices(branch);
+    }
+
+    void UpdateModel() {
         UpdateBranches();
         UpdateBaseOccupancies();
         UpdateOccupancies();
         UpdateMatrices();
+    }
+
+    void UpdateStats() {
         theta->Update();
+        for (Tree::BranchIndex b = 0; b < Nbranch; b++) { (*branchdnds)[b] = GetPredictedDNDS(b); }
+    }
+
+    void Update() {
+        UpdateModel();
         ResampleSub(1.0);
     }
 
     void PostPred(std::string name) {
-        UpdateBranches();
-        UpdateBaseOccupancies();
-        UpdateOccupancies();
-        UpdateMatrices();
+        UpdateModel();
         phyloprocess->PostPredSample(name);
     }
 
@@ -663,17 +680,8 @@ class DatedMutSelModel : public ChainComponent {
     //! log prior of
     double RootMultivariateLogPrior() const { return node_multivariate->GetLogProb(tree->root()); }
 
-    //! log prior of hyperparameters of branch rates (brownian process)
-    double RootMultivariateHyperLogPrior() const { return 0.0; }
-
     //! log prior over theta
-    double ThetaLogPrior() const {
-        if (theta_scale > thetamax) {
-            return -std::numeric_limits<double>::infinity();
-        } else {
-            return -log(theta_scale);
-        }
-    }
+    double ThetaLogPrior() const { return 0.0; }
 
     //! log prior over nuc rates rho and pi (uniform)
     double NucRatesLogPrior() const {
@@ -733,29 +741,29 @@ class DatedMutSelModel : public ChainComponent {
 
     //! collect sufficient statistics if substitution mappings across sites
     void CollectSitePathSuffStat() {
-        sitepathsuffstatbidimarray->Clear();
-        sitepathsuffstatbidimarray->AddSuffStat(*phyloprocess);
+        branchsitepathsuffstatbidimarray->Clear();
+        branchsitepathsuffstatbidimarray->AddSuffStat(*phyloprocess);
         if (polyprocess != nullptr) {
-            sitepolysuffstatbidimarray->Clear();
-            sitepolysuffstatbidimarray->AddSuffStat(*phyloprocess);
+            taxonsitepolysuffstatbidimarray->Clear();
+            taxonsitepolysuffstatbidimarray->AddSuffStat(*phyloprocess);
         }
     }
 
     //! gather site-specific sufficient statistics component-wise
     void CollectComponentPathSuffStat() {
-        componentpathsuffstatbidimarray->Clear();
-        componentpathsuffstatbidimarray->Add(*sitepathsuffstatbidimarray, *sitealloc);
+        branchcomponentpathsuffstatbidimarray->Clear();
+        branchcomponentpathsuffstatbidimarray->Add(*branchsitepathsuffstatbidimarray, *sitealloc);
         if (polyprocess != nullptr) {
-            componentpolysuffstatbidimarray->Clear();
-            componentpolysuffstatbidimarray->Add(*sitepolysuffstatbidimarray, *sitealloc);
+            taxoncomponentpolysuffstatbidimarray->Clear();
+            taxoncomponentpolysuffstatbidimarray->Add(*taxonsitepolysuffstatbidimarray, *sitealloc);
         }
     }
 
     //! collect sufficient statistics for moving branch lengths (directly from the
     //! substitution mappings)
     void CollectLengthSuffStat() {
-        lengthpathsuffstatarray->Clear();
-        lengthpathsuffstatarray->AddLengthPathSuffStat(*phyloprocess);
+        branchlengthpathsuffstatarray->Clear();
+        branchlengthpathsuffstatarray->AddLengthPathSuffStat(*phyloprocess);
     }
 
     // Scatter (brownian process)
@@ -774,7 +782,7 @@ class DatedMutSelModel : public ChainComponent {
     double PolySuffStatLogProb() const {
         //! sum over all components to get log prob
         if (polyprocess != nullptr) {
-            return componentpolysuffstatbidimarray->GetLogProb(
+            return taxoncomponentpolysuffstatbidimarray->GetLogProb(
                 *poissonrandomfield, *componentaafitnessarray, *nucmatrix, *theta);
         } else {
             return 0;
@@ -788,7 +796,7 @@ class DatedMutSelModel : public ChainComponent {
         if (polyprocess != nullptr) {
             double tot = 0;
             for (int taxon = 0; taxon < Ntaxa; taxon++) {
-                tot += componentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
+                tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
                     *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix,
                     theta->GetTheta(taxon));
             }
@@ -806,7 +814,7 @@ class DatedMutSelModel : public ChainComponent {
             double tot = 0;
             double d_theta = theta->GetTheta(taxon);
             for (int k = 0; k < Ncat; k++) {
-                tot += componentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
+                tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
                     *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix, d_theta);
             }
             return tot;
@@ -817,8 +825,12 @@ class DatedMutSelModel : public ChainComponent {
 
     //! return log prob of the current substitution mapping, as a function of the
     //! current codon substitution process
+    double PathLogProb() const { return GetLogPrior() + PathSuffStatLogProb(); }
+
+    //! return log prob of the current substitution mapping, as a function of the
+    //! current codon substitution process
     double PathSuffStatLogProb() const {
-        return componentpathsuffstatbidimarray->GetLogProb(*branchcomponentcodonmatrixarray) +
+        return branchcomponentpathsuffstatbidimarray->GetLogProb(*branchcomponentcodonmatrixarray) +
                PolySuffStatLogProb();
     }
 
@@ -827,7 +839,7 @@ class DatedMutSelModel : public ChainComponent {
     double ComponentPathSuffStatLogProb(int k) const {
         double loglk = 0.0;
         for (int branch{0}; branch < Nbranch; branch++) {
-            loglk += componentpathsuffstatbidimarray->GetVal(branch, k).GetLogProb(
+            loglk += branchcomponentpathsuffstatbidimarray->GetVal(branch, k).GetLogProb(
                 branchcomponentcodonmatrixarray->GetVal(branch, k));
         }
         loglk += ComponentPolySuffStatLogProb(k);
@@ -871,14 +883,14 @@ class DatedMutSelModel : public ChainComponent {
             // for the branch attached to the node
             tot += BranchLengthSuffStatLogProb(tree->branch_index(node));
         }
-        assert(tot != 0);
         return tot;
     }
 
     //! \brief return log prob of current substitution mapping (on focal branch), as a function of
     //! the length of a given branch
     double BranchLengthSuffStatLogProb(Tree::BranchIndex branch) const {
-        return lengthpathsuffstatarray->GetVal(branch).GetLogProb(branchlength->GetVal(branch));
+        return branchlengthpathsuffstatarray->GetVal(branch).GetLogProb(
+            branchlength->GetVal(branch));
     }
 
     // PopSize
@@ -902,22 +914,15 @@ class DatedMutSelModel : public ChainComponent {
         if (tree->is_leaf(node) and polyprocess != nullptr) {
             tot += TaxonPolySuffStatLogProb(taxonset->GetTaxonIndex(tree->node_name(node)));
         }
-        assert(tot != 0);
         return tot;
     }
 
     //! \brief return log prob of current substitution mapping (on focal branch), as a function of
     //! omega of a given branch
     double NodePopSizeSuffStatLogProb(Tree::BranchIndex branch) const {
-        return componentpathsuffstatbidimarray->GetRowLogProb(
+        return branchcomponentpathsuffstatbidimarray->GetRowLogProb(
             branch, *branchcomponentcodonmatrixarray);
     }
-
-    //! Root log prob
-    double RootLogProb() const {
-        return RootMultivariateHyperLogPrior() + RootMultivariateLogPrior();
-    }
-
 
     //! log prob factor to be recomputed when Theta=4*Ne*u
     double ThetaLogProb() const { return ThetaLogPrior() + PolySuffStatLogProb(); }
@@ -950,6 +955,7 @@ class DatedMutSelModel : public ChainComponent {
     double Move() {
         ResampleSub(1.0);
         MoveParameters(30);
+        UpdateStats();
         return 1.0;
     }
 
@@ -958,7 +964,6 @@ class DatedMutSelModel : public ChainComponent {
     void ResampleSub(double frac) {
         UpdateMatrices();
         phyloprocess->Move(frac);
-        theta->Update();
         CheckMapping();
     }
 
@@ -989,6 +994,11 @@ class DatedMutSelModel : public ChainComponent {
             MoveNodeAges(1.0, 3);
             MoveNodeAges(0.1, 3);
 
+            if (debug) {
+                CollectLengthSuffStat();
+                CollectSitePathSuffStat();
+                CollectComponentPathSuffStat();
+            }
             MoveNodeRates(1.0, 3);
             MoveNodeRates(0.1, 3);
 
@@ -1055,13 +1065,30 @@ class DatedMutSelModel : public ChainComponent {
 
     //! MH moves on branch rates (brownian process) for a focal node
     void MoveNodeProcessRate(Tree::NodeIndex node, double tuning) {
+        double debug_logratio = 0;
+        if (debug) {
+            UpdateModel();
+            debug_logratio = -PathLogProb();
+        }
         double logratio = -LocalNodeRatesLogProb(node);
 
         double m = tuning * noderates->GetSigma() * (Random::Uniform() - 0.5);
         noderates->SlidingMove(node, m);
         UpdateLocalBranchRates(node);
 
-        logratio += LocalNodeRatesLogProb(node);
+        double logprob = LocalNodeRatesLogProb(node);
+        logratio += logprob;
+        if (debug) {
+            UpdateModel();
+            double update_logprob = LocalNodeRatesLogProb(node);
+            if (abs(update_logprob - logprob) > 1e-4) {
+                std::cerr << "UpdateLocalBranchRates was wrong." << std::endl;
+            }
+            debug_logratio += PathLogProb();
+            if (abs(debug_logratio - logratio) > 1e-4) {
+                std::cerr << "LocalNodeRatesLogProb was wrong." << std::endl;
+            }
+        }
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
@@ -1074,22 +1101,39 @@ class DatedMutSelModel : public ChainComponent {
     void MoveNodePopSize(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
-                if (!tree->is_root(node)) {
-                    MoveNodePopSize(node, tuning);
-                }
+                if (!tree->is_root(node)) { MoveNodePopSize(node, tuning); }
             }
         }
     }
 
     //! MH moves on branch omega (brownian process) for a focal node
     void MoveNodePopSize(Tree::NodeIndex node, double tuning) {
+        double debug_logratio = 0;
+        if (debug) {
+            UpdateModel();
+            debug_logratio = -PathLogProb();
+        }
+
         double logratio = -LocalNodePopSizeLogProb(node);
 
         double m = tuning * nodepopsize->GetSigma() * (Random::Uniform() - 0.5);
         nodepopsize->SlidingMove(node, m);
         UpdateLocalBranchPopSize(node);
 
-        logratio += LocalNodePopSizeLogProb(node);
+        double logprob = LocalNodePopSizeLogProb(node);
+        logratio += logprob;
+
+        if (debug) {
+            UpdateModel();
+            double update_logprob = LocalNodePopSizeLogProb(node);
+            if (abs(update_logprob - logprob) > 1e-4) {
+                std::cerr << "UpdateLocalBranchPopSize was wrong." << std::endl;
+            }
+            debug_logratio += PathLogProb();
+            if (abs(debug_logratio - logratio) > 1e-4) {
+                std::cerr << "LocalNodePopSizeLogProb was wrong." << std::endl;
+            }
+        }
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
@@ -1111,7 +1155,6 @@ class DatedMutSelModel : public ChainComponent {
             &DatedMutSelModel::NoUpdate, this);
         Move::Scaling(theta_scale, 0.3, 10, &DatedMutSelModel::ThetaLogProb,
             &DatedMutSelModel::NoUpdate, this);
-        assert(theta_scale <= thetamax);
     }
 
     //! MH move on nucleotide rate parameters
@@ -1295,7 +1338,7 @@ class DatedMutSelModel : public ChainComponent {
         const std::vector<double> &w = weight->GetArray();
 
         // !!!!! Here the branch should not matter, so we use the root.
-        const PathSuffStat &suffstat = sitepathsuffstatbidimarray->GetVal(0, site);
+        const PathSuffStat &suffstat = branchsitepathsuffstatbidimarray->GetVal(0, site);
         for (int i = 0; i < Ncat; i++) {
             // !!!!! Here the condition should not matter, so we use site 0.
             double tmp = suffstat.GetLogProb(branchcomponentcodonmatrixarray->GetVal(0, 0));
@@ -1531,6 +1574,18 @@ class DatedMutSelModel : public ChainComponent {
         return tot / Ncat;
     }
 
+    double GetPredictedDNDS(Tree::BranchIndex branch) const {
+        double mean = 0;
+        for (int k = 0; k < Ncat; k++) {
+            if (occupancy->GetVal(k)) {
+                mean += occupancy->GetVal(k) *
+                        branchcomponentcodonmatrixarray->GetVal(branch, k).GetPredictedDNDS();
+            }
+        }
+        mean /= Nsite;
+        return mean;
+    }
+
     double GetPredictedDNDS() const {
         double mean = 0;
         for (int k = 0; k < Ncat; k++) {
@@ -1542,7 +1597,6 @@ class DatedMutSelModel : public ChainComponent {
             }
         }
         mean /= (Nsite * Nbranch);
-        assert(mean <= 1);
         return mean;
     }
 
@@ -1554,7 +1608,7 @@ class DatedMutSelModel : public ChainComponent {
 std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m) {
     std::string model_name, datafile, treefile, profiles;
     int Ncat, baseNcat;
-    bool condition_aware, polymorphism_aware;
+    bool condition_aware, polymorphism_aware, debug;
     unsigned precision;
 
     is >> model_name;
@@ -1565,9 +1619,9 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
 
     is >> datafile >> treefile >> profiles;
     is >> Ncat >> baseNcat;
-    is >> condition_aware >> polymorphism_aware >> precision;
-    m.reset(new DatedMutSelModel(
-        datafile, treefile, profiles, Ncat, baseNcat, condition_aware, polymorphism_aware, precision));
+    is >> condition_aware >> polymorphism_aware >> precision >> debug;
+    m.reset(new DatedMutSelModel(datafile, treefile, profiles, Ncat, baseNcat, condition_aware,
+        polymorphism_aware, precision, debug));
     Tracer tracer{*m, &DatedMutSelModel::declare_model};
     tracer.read_line(is);
     m->Update();
@@ -1586,6 +1640,7 @@ std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m) {
     os << m.condition_aware << '\t';
     os << m.polymorphism_aware << '\t';
     os << m.precision << '\t';
+    os << m.debug << '\t';
     tracer.write_line(os);
     return os;
 }

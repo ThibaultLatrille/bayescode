@@ -37,7 +37,8 @@ class AAMutSelOmegaCodonSubMatrix : public virtual NucCodonSubMatrix,
     //! \brief access by copy to fitness of a given amino-acid
     //!
     //! Note: to avoid numerical errors, this function returns aa[a] + 1e-8.
-    double GetFitness(int a) const { return Ne * aa[a] + 1e-8; }
+    double GetFitness(int a) const { return exp(Ne * log(aa[a])) + 1e-8; }
+    double GetLogFitness(int a) const { return log(GetFitness(a)); }
 
     double GetPredictedDNDS() const;
 

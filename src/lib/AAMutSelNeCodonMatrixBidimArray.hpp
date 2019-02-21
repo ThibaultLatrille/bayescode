@@ -73,8 +73,9 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
     void SetNe(std::vector<double> &Ne) {
         assert(GetNcol() > 0);
         assert(GetNrow() > 0);
+        assert(GetNrow() == static_cast<int>(Ne.size()));
         for (int i = 0; i < this->GetNrow(); i++) {
-            for (int j = 0; j < this->GetNcol(); j++) { (*this)(i, j).SetNe(Ne[i]); }
+            SetRowNe(i, Ne[i]);
         }
     }
 

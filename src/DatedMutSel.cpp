@@ -21,9 +21,12 @@ class DatedMutselArgParse : public BaseArgParse {
     SwitchArg condition_aware{"b", "condition_aware",
         "One Ne per condition, if the tree doesn't have condition, then one Ne per branch", cmd,
         false};
-    ValueArg<unsigned> precision{"", "precision", "The precision of PRF computation", false, 6, "unsigned", cmd};
-    ValueArg<std::string> profiles{"c", "profiles", "Preferences profiles (to clamp)", false, "", "string", cmd};
+    ValueArg<std::string> profiles{
+        "c", "profiles", "Preferences profiles (to clamp)", false, "", "string", cmd};
     SwitchArg polymorphism_aware{"p", "polymorphism_aware", "Use polymorphic data", cmd, false};
+    ValueArg<unsigned> precision{
+        "", "precision", "The precision of PRF computation", false, 6, "unsigned", cmd};
+    SwitchArg debug{"d", "debug", "Debug mode (slower)", cmd, false};
 };
 
 int main(int argc, char *argv[]) {
@@ -43,10 +46,12 @@ int main(int argc, char *argv[]) {
         cmd.parse();
         chain_driver =
             new ChainDriver(cmd.chain_name(), args.every.getValue(), args.until.getValue());
-        model = unique_ptr<DatedMutSelModel>(new DatedMutSelModel(args.alignment.getValue(),
-            args.treefile.getValue(), datedmutsel_args.profiles.getValue(),
-            datedmutsel_args.ncat.getValue(), datedmutsel_args.basencat.getValue(),
-            datedmutsel_args.condition_aware.getValue(), datedmutsel_args.polymorphism_aware.getValue(), datedmutsel_args.precision.getValue()));
+        model = unique_ptr<DatedMutSelModel>(
+            new DatedMutSelModel(args.alignment.getValue(), args.treefile.getValue(),
+                datedmutsel_args.profiles.getValue(), datedmutsel_args.ncat.getValue(),
+                datedmutsel_args.basencat.getValue(), datedmutsel_args.condition_aware.getValue(),
+                datedmutsel_args.polymorphism_aware.getValue(),
+                datedmutsel_args.precision.getValue(), datedmutsel_args.debug.getValue()));
         model->Update();
     }
 
