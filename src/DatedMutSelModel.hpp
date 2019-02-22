@@ -739,10 +739,14 @@ class DatedMutSelModel : public ChainComponent {
     //  Collecting Suff Stats
     //-------------------
 
-    //! collect sufficient statistics if substitution mappings across sites
+    //! collect sufficient statistics for substitution mappings across sites
     void CollectSitePathSuffStat() {
         branchsitepathsuffstatbidimarray->Clear();
         branchsitepathsuffstatbidimarray->AddSuffStat(*phyloprocess);
+    }
+
+    //! collect sufficient statistics at the tips of the tree
+    void CollectSitePolySuffStat() {
         if (polyprocess != nullptr) {
             taxonsitepolysuffstatbidimarray->Clear();
             taxonsitepolysuffstatbidimarray->AddSuffStat(*phyloprocess);
@@ -751,8 +755,14 @@ class DatedMutSelModel : public ChainComponent {
 
     //! gather site-specific sufficient statistics component-wise
     void CollectComponentPathSuffStat() {
-        branchcomponentpathsuffstatbidimarray->Clear();
-        branchcomponentpathsuffstatbidimarray->Add(*branchsitepathsuffstatbidimarray, *sitealloc);
+        if (polyprocess != nullptr) {
+            taxoncomponentpolysuffstatbidimarray->Clear();
+            taxoncomponentpolysuffstatbidimarray->Add(*taxonsitepolysuffstatbidimarray, *sitealloc);
+        }
+    }
+
+    //! gather site-specific tips of the tree sufficient statistics component-wise
+    void CollectComponentPolySuffStat() {
         if (polyprocess != nullptr) {
             taxoncomponentpolysuffstatbidimarray->Clear();
             taxoncomponentpolysuffstatbidimarray->Add(*taxonsitepolysuffstatbidimarray, *sitealloc);
@@ -766,11 +776,27 @@ class DatedMutSelModel : public ChainComponent {
         branchlengthpathsuffstatarray->AddLengthPathSuffStat(*phyloprocess);
     }
 
-    // Scatter (brownian process)
-
+    //! collect sufficient statistics for sampling the correlation matrix of the brownian process
     void CollectScatterSuffStat() {
         scattersuffstat->Clear();
         scattersuffstat->AddSuffStat(*node_multivariate);
+    }
+
+    //! collect suff stats for moving center and concentration parameters of the
+    //! base mixture
+    void CollectBaseSuffStat() {
+        basesuffstatarray->Clear();
+        componentaafitnessarray->AddSuffStat(*basesuffstatarray, *componentalloc);
+    }
+
+    void CollectSuffStat() {
+        CollectLengthSuffStat();
+        CollectSitePathSuffStat();
+        CollectSitePolySuffStat();
+        CollectComponentPathSuffStat();
+        CollectComponentPolySuffStat();
+        CollectScatterSuffStat();
+        CollectBaseSuffStat();
     }
 
     //-------------------
@@ -893,6 +919,18 @@ class DatedMutSelModel : public ChainComponent {
             branchlength->GetVal(branch));
     }
 
+    //! \brief return log prob of current substitution mapping, as a function of
+    //! the lengths of the tree
+    double BranchLengthSuffStatLogProb() const {
+        return branchlengthpathsuffstatarray->GetLogProb(*branchlength);
+    }
+
+    //! \brief return log prob of current substitution mapping, as a function of
+    //! the length of a given branch
+    double BranchLengthLogProb() const {
+        return GetLogPrior() + BranchLengthSuffStatLogProb() + PolySuffStatLogProb();
+    }
+
     // PopSize
     //! \brief log prob to be recomputed when moving omega (brownian process) around of focal node
     double LocalNodePopSizeLogProb(Tree::NodeIndex node) const {
@@ -964,10 +1002,10 @@ class DatedMutSelModel : public ChainComponent {
     void ResampleSub(double frac) {
         UpdateMatrices();
         phyloprocess->Move(frac);
-        CheckMapping();
+        assert(CheckMapping());
     }
 
-    void CheckMapping() const {
+    bool CheckMapping() const {
         for (int taxon = 0; taxon < Ntaxa; taxon++) {
             for (int site = 0; site < Nsite; site++) {
                 int sub_state = phyloprocess->GetPathState(taxon, site);
@@ -982,23 +1020,22 @@ class DatedMutSelModel : public ChainComponent {
                     std::cerr << "Substitution mapping final state is not even a neighbor of "
                                  "the state given by the alignment"
                               << std::endl;
+                    return false;
                 }
             }
         }
+        return true;
     }
 
     //! complete series of MCMC moves on all parameters (repeated nrep times)
     void MoveParameters(int nrep) {
+        CollectSitePolySuffStat();
         for (int rep = 0; rep < nrep; rep++) {
+            CollectComponentPolySuffStat();
+
             CollectLengthSuffStat();
             MoveNodeAges(1.0, 3);
             MoveNodeAges(0.1, 3);
-
-            if (debug) {
-                CollectLengthSuffStat();
-                CollectSitePathSuffStat();
-                CollectComponentPathSuffStat();
-            }
             MoveNodeRates(1.0, 3);
             MoveNodeRates(0.1, 3);
 
@@ -1010,7 +1047,6 @@ class DatedMutSelModel : public ChainComponent {
 
             CollectScatterSuffStat();
             SamplePrecisionMatrix();
-            UpdateMatrices();
 
             if (polyprocess != nullptr) { MoveTheta(); }
 
@@ -1038,6 +1074,8 @@ class DatedMutSelModel : public ChainComponent {
 
     //! MH moves on branch ages for a focal node
     void MoveNodeAge(Tree::NodeIndex node, double tuning) {
+        double debug_logratio = 0;
+        if (debug) { debug_logratio = -BranchLengthLogProb(); }
         double logratio = -LocalNodeAgeLogProb(node);
 
         double bk = nodeages->GetVal(node);
@@ -1045,7 +1083,25 @@ class DatedMutSelModel : public ChainComponent {
         nodeages->SlidingMove(node, sliding);
         UpdateLocalChronogram(node);
 
-        logratio += LocalNodeAgeLogProb(node);
+        double logprob = LocalNodeAgeLogProb(node);
+        logratio += logprob;
+
+        if (debug) {
+            UpdateModel();
+            double update_logprob = LocalNodeAgeLogProb(node);
+            if (abs(update_logprob - logprob) > 1e-4) {
+                std::cerr << "UpdateLocalChronogram was wrong." << std::endl;
+            }
+            CollectSuffStat();
+            update_logprob = LocalNodeAgeLogProb(node);
+            if (abs(update_logprob - logprob) > 1e-4) {
+                std::cerr << "SuffStats were not collected for MoveNodeAge." << std::endl;
+            }
+            debug_logratio += BranchLengthLogProb();
+            if (abs(debug_logratio - logratio) > 1e-4) {
+                std::cerr << "LocalNodeAgeLogProb was wrong." << std::endl;
+            }
+        }
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
@@ -1066,10 +1122,7 @@ class DatedMutSelModel : public ChainComponent {
     //! MH moves on branch rates (brownian process) for a focal node
     void MoveNodeProcessRate(Tree::NodeIndex node, double tuning) {
         double debug_logratio = 0;
-        if (debug) {
-            UpdateModel();
-            debug_logratio = -PathLogProb();
-        }
+        if (debug) { debug_logratio = -BranchLengthLogProb(); }
         double logratio = -LocalNodeRatesLogProb(node);
 
         double m = tuning * noderates->GetSigma() * (Random::Uniform() - 0.5);
@@ -1084,7 +1137,12 @@ class DatedMutSelModel : public ChainComponent {
             if (abs(update_logprob - logprob) > 1e-4) {
                 std::cerr << "UpdateLocalBranchRates was wrong." << std::endl;
             }
-            debug_logratio += PathLogProb();
+            CollectSuffStat();
+            update_logprob = LocalNodeRatesLogProb(node);
+            if (abs(update_logprob - logprob) > 1e-4) {
+                std::cerr << "SuffStats were not collected for MoveNodeProcessRate." << std::endl;
+            }
+            debug_logratio += BranchLengthLogProb();
             if (abs(debug_logratio - logratio) > 1e-4) {
                 std::cerr << "LocalNodeRatesLogProb was wrong." << std::endl;
             }
@@ -1109,10 +1167,7 @@ class DatedMutSelModel : public ChainComponent {
     //! MH moves on branch omega (brownian process) for a focal node
     void MoveNodePopSize(Tree::NodeIndex node, double tuning) {
         double debug_logratio = 0;
-        if (debug) {
-            UpdateModel();
-            debug_logratio = -PathLogProb();
-        }
+        if (debug) { debug_logratio = -PathLogProb(); }
 
         double logratio = -LocalNodePopSizeLogProb(node);
 
@@ -1128,6 +1183,11 @@ class DatedMutSelModel : public ChainComponent {
             double update_logprob = LocalNodePopSizeLogProb(node);
             if (abs(update_logprob - logprob) > 1e-4) {
                 std::cerr << "UpdateLocalBranchPopSize was wrong." << std::endl;
+            }
+            CollectSuffStat();
+            update_logprob = LocalNodePopSizeLogProb(node);
+            if (abs(update_logprob - logprob) > 1e-4) {
+                std::cerr << "SuffStats were not collected for MoveNodePopSize." << std::endl;
             }
             debug_logratio += PathLogProb();
             if (abs(debug_logratio - logratio) > 1e-4) {
@@ -1398,13 +1458,6 @@ class DatedMutSelModel : public ChainComponent {
             MoveBaseConcentrations(1.0);
             MoveBaseConcentrations(0.3);
         }
-    }
-
-    //! collect suff stats for moving center and concentration parameters of the
-    //! base mixture
-    void CollectBaseSuffStat() {
-        basesuffstatarray->Clear();
-        componentaafitnessarray->AddSuffStat(*basesuffstatarray, *componentalloc);
     }
 
     //! MCMC module for moving the center parameters of the components of the the
