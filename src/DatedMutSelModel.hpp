@@ -91,6 +91,16 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
 
     // skip the header of the file
     getline(input_stream, line);
+    char sep{' '};
+    long nbr_col = 0;
+    for (char sep_test : std::vector<char>({' ', ',', '\t'})) {
+        long n = std::count(line.begin(), line.end(), sep_test);
+        if (n > nbr_col) {
+            sep = sep_test;
+            nbr_col = n + 1;
+        }
+    }
+    nbr_col -= 20;
 
     while (getline(input_stream, line)) {
         std::vector<double> fitness_profil(20, 0.0);
@@ -98,8 +108,8 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
         std::istringstream line_stream(line);
         unsigned counter{0};
 
-        while (getline(line_stream, word, ' ')) {
-            if (counter > 2) { fitness_profil[counter - 3] = stod(word); }
+        while (getline(line_stream, word, sep)) {
+            if (counter > nbr_col) { fitness_profil[counter - (nbr_col + 1)] = stod(word); }
             counter++;
         }
 
@@ -112,9 +122,10 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
             }
         }
         if (push) {
+            alloc.push_back(fitness_profiles.size());
             fitness_profiles.push_back(fitness_profil);
-            alloc.push_back(alloc.size());
         }
+        assert(alloc[alloc.size() - 1] < fitness_profiles.size());
     }
     return std::make_tuple(fitness_profiles, alloc);
 }
