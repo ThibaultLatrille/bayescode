@@ -450,77 +450,74 @@ class DatedMutSelModel : public ChainComponent {
 
     void move(int it) override { Move(); }
 
-    template <class C>
-    void declare_model(C &t) {
-        t.add("nodeages", *nodeages);
-        t.add("node_multivariate", *node_multivariate);
-        t.add("covmatrix", precision_matrix);
-        t.add("invert_whishart_kappa", invert_whishart_kappa);
-        t.add("invert_whishart_df", invert_whishart_df);
-        t.add("nucrelrate", nucrelrate);
-        t.add("nucstat", nucstat);
-        t.add("basekappa", basekappa);
-        t.add("baseweight", *baseweight);
-        t.add("componentalloc", *componentalloc);
-        t.add("*basecenterarray", *basecenterarray);
-        t.add("*baseconcentrationarray", *baseconcentrationarray);
-        t.add("kappa", kappa);
-        t.add("weight", *weight);
-        t.add("componentaafitnessarray", *componentaafitnessarray);
-        t.add("sitealloc", *sitealloc);
-        if (polyprocess != nullptr) { t.add("theta_scale", theta_scale); }
-    }
+    template <class Info>
+    void declare_interface(Info info) {
+        model_node(info, "nodeages", *nodeages);
+        model_node(info, "node_multivariate", *node_multivariate);
+        model_node(info, "covmatrix", precision_matrix);
+        model_node(info, "invert_whishart_kappa", invert_whishart_kappa);
+        model_node(info, "invert_whishart_df", invert_whishart_df);
+        model_node(info, "nucrelrate", nucrelrate);
+        model_node(info, "nucstat", nucstat);
+        model_node(info, "basekappa", basekappa);
+        model_node(info, "baseweight", *baseweight);
+        model_node(info, "componentalloc", *componentalloc);
+        model_node(info, "*basecenterarray", *basecenterarray);
+        model_node(info, "*baseconcentrationarray", *baseconcentrationarray);
+        model_node(info, "kappa", kappa);
+        model_node(info, "weight", *weight);
+        model_node(info, "componentaafitnessarray", *componentaafitnessarray);
+        model_node(info, "sitealloc", *sitealloc);
+        if (polyprocess != nullptr) { model_node(info, "theta_scale", theta_scale); }
 
-    template <class C>
-    void declare_stats(C &t) {
-        t.add("lnPrior", [this]() { return GetLogPrior(); });
-        t.add("lnLikelihood", [this]() { return GetLogLikelihood(); });
+        model_stat(info, "lnPrior", [this]() { return GetLogPrior(); });
+        model_stat(info, "lnLikelihood", [this]() { return GetLogLikelihood(); });
         // 3x: per coding site (and not per nucleotide site)
-        t.add("PredictedDNDS", [this]() { return GetPredictedDNDS(); });
+        model_stat(info, "PredictedDNDS", [this]() { return GetPredictedDNDS(); });
         if (polyprocess != nullptr) {
-            t.add("ThetaScale", theta_scale);
+            model_stat(info, "ThetaScale", theta_scale);
             for (int taxon = 0; taxon < Ntaxa; taxon++) {
-                t.add("*Theta_" + taxonset->GetTaxon(taxon), (*theta)[taxon]);
+                model_stat(info, "*Theta_" + taxonset->GetTaxon(taxon), (*theta)[taxon]);
             }
         }
-        t.add("Ncluster", [this]() { return GetNcluster(); });
-        t.add("kappa", kappa);
+        model_stat(info, "Ncluster", [this]() { return GetNcluster(); });
+        model_stat(info, "kappa", kappa);
         if (baseNcat > 1) {
-            t.add("basencluster", [this]() { return GetBaseNcluster(); });
-            t.add("basekappa", basekappa);
+            model_stat(info, "basencluster", [this]() { return GetBaseNcluster(); });
+            model_stat(info, "basekappa", basekappa);
         }
         for (int i = 0; i < dimension; i++) {
             for (int j = 0; j <= i; j++) {
-                t.add("Covariance_" + std::to_string(i) + "_" + std::to_string(j),
+                model_stat(info, "Covariance_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
             }
         }
 
-        t.add("BranchRatesMean", [this]() { return branchrates->GetMean(); });
-        t.add("BranchRatesVar", [this]() { return branchrates->GetVar(); });
-        t.add("BranchLengthSum", [this]() { return branchlength->GetSum(); });
-        t.add("BranchLengthMean", [this]() { return branchlength->GetMean(); });
-        t.add("BranchLengthVar", [this]() { return branchlength->GetVar(); });
-        t.add("BranchPopSizesMean", [this]() { return branchpopsize->GetMean(); });
-        t.add("BranchPopSizesVar", [this]() { return branchpopsize->GetVar(); });
+        model_stat(info, "BranchRatesMean", [this]() { return branchrates->GetMean(); });
+        model_stat(info, "BranchRatesVar", [this]() { return branchrates->GetVar(); });
+        model_stat(info, "BranchLengthSum", [this]() { return branchlength->GetSum(); });
+        model_stat(info, "BranchLengthMean", [this]() { return branchlength->GetMean(); });
+        model_stat(info, "BranchLengthVar", [this]() { return branchlength->GetVar(); });
+        model_stat(info, "BranchPopSizesMean", [this]() { return branchpopsize->GetMean(); });
+        model_stat(info, "BranchPopSizesVar", [this]() { return branchpopsize->GetVar(); });
         for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
-            t.add("*NodePopSize_" + tree->node_name(node), (*nodepopsize)[node]);
-            t.add("*NodeRate_" + tree->node_name(node), (*noderates)[node]);
+            model_stat(info, "*NodePopSize_" + tree->node_name(node), (*nodepopsize)[node]);
+            model_stat(info, "*NodeRate_" + tree->node_name(node), (*noderates)[node]);
             if (!tree->is_root(node)) {
-                t.add("*BranchdNdS_" + tree->node_name(node),
+                model_stat(info, "*BranchdNdS_" + tree->node_name(node),
                     (*branchdnds)[tree->branch_index(node)]);
-                t.add("*BranchTime_" + tree->node_name(node),
+                model_stat(info, "*BranchTime_" + tree->node_name(node),
                     (*chronogram)[tree->branch_index(node)]);
-                t.add("*BranchLength_" + tree->node_name(node),
+                model_stat(info, "*BranchLength_" + tree->node_name(node),
                     (*branchlength)[tree->branch_index(node)]);
             }
         }
-        t.add("MeanAAEntropy", [this]() { return GetMeanAAEntropy(); });
-        t.add(
+        model_stat(info, "MeanAAEntropy", [this]() { return GetMeanAAEntropy(); });
+        model_stat(info, 
             "MeanComponentAAConcentration", [this]() { return GetMeanComponentAAConcentration(); });
-        t.add("MeanComponentAAEntropy", [this]() { return GetMeanComponentAAEntropy(); });
-        t.add("NucStatEntropy", [&]() { return Random::GetEntropy(nucstat); });
-        t.add("NucRateEntropy", [&]() { return Random::GetEntropy(nucrelrate); });
+        model_stat(info, "MeanComponentAAEntropy", [this]() { return GetMeanComponentAAEntropy(); });
+        model_stat(info, "NucStatEntropy", [&]() { return Random::GetEntropy(nucstat); });
+        model_stat(info, "NucRateEntropy", [&]() { return Random::GetEntropy(nucrelrate); });
     }
 
     //-------------------
@@ -639,11 +636,13 @@ class DatedMutSelModel : public ChainComponent {
 
     void Update() {
         UpdateModel();
+        UpdateStats();
         ResampleSub(1.0);
     }
 
     void PostPred(std::string name) {
         UpdateModel();
+        UpdateStats();
         phyloprocess->PostPredSample(name);
     }
 
@@ -1684,16 +1683,16 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
     is >> datafile >> treefile >> profiles;
     is >> Ncat >> baseNcat;
     is >> condition_aware >> polymorphism_aware >> precision >> debug;
-    m.reset(new DatedMutSelModel(datafile, treefile, profiles, Ncat, baseNcat, condition_aware,
-        polymorphism_aware, precision, debug));
-    Tracer tracer{*m, &DatedMutSelModel::declare_model};
+    m = std::make_unique<DatedMutSelModel>(datafile, treefile, profiles, Ncat, baseNcat, condition_aware,
+        polymorphism_aware, precision, debug);
+    Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
     return is;
 }
 
 std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m) {
-    Tracer tracer{m, &DatedMutSelModel::declare_model};
+    Tracer tracer{m};
     os << "DatedMutSelModel" << '\t';
     os << m.datafile << '\t';
     os << m.treefile << '\t';

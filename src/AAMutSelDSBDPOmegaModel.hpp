@@ -306,7 +306,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         model_node(info, "componentaafitnessarray", *componentaafitnessarray);
         model_node(info, "sitealloc", *sitealloc);
         if (omegamode < 2) { model_node(info, "omega; ", omega); }
-        if (polyprocess != nullptr) { model_node(info, "theta; ", theta); }
+        if (polyprocess != nullptr) { model_node(info, "theta_scale", theta_scale); }
 
 
         model_stat(info, "logprior", [this]() { return GetLogPrior(); });
@@ -314,7 +314,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         // 3x: per coding site (and not per nucleotide site)
         model_stat(info, "length", [this]() { return 3 * branchlength->GetTotalLength(); });
         model_stat(info, "omega", omega);
-        model_stat(info, "theta", theta);
+        model_stat(info, "theta", [this]() { return theta->GetTheta(); });
         model_stat(info, "ncluster", [this]() { return GetNcluster(); });
         model_stat(info, "kappa", kappa);
         if (baseNcat > 1) {
@@ -790,8 +790,8 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     double ComponentPolySuffStatLogProb(int k) const {
         // sum over all sites allocated to component k
         if (polyprocess != nullptr) {
-            return componentpolysuffstatarray->GetVal(k).GetLogProb(
-                *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix, theta->GetTheta());
+            return componentpolysuffstatarray->GetVal(k).GetLogProb(*poissonrandomfield,
+                componentaafitnessarray->GetVal(k), *nucmatrix, theta->GetTheta());
         } else {
             return 0.0;
         }

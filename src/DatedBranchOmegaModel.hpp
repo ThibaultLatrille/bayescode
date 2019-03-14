@@ -185,33 +185,30 @@ class DatedBranchOmegaModel : public ChainComponent {
 
     void move(int it) override { Move(); }
 
-    template <class C>
-    void declare_model(C &t) {
-        t.add("nucstat", nucstat);
-        t.add("nucrelrate", nucrelrate);
-        t.add("nodeages", *nodeages);
-        t.add("node_multivariate", *node_multivariate);
-        t.add("covmatrix", precision_matrix);
-        t.add("invert_whishart_kappa", invert_whishart_kappa);
-        t.add("invert_whishart_df", invert_whishart_df);
-    }
+    template <class Info>
+    void declare_interface(Info info) {
+        model_node(info, "nucstat", nucstat);
+        model_node(info, "nucrelrate", nucrelrate);
+        model_node(info, "nodeages", *nodeages);
+        model_node(info, "node_multivariate", *node_multivariate);
+        model_node(info, "covmatrix", precision_matrix);
+        model_node(info, "invert_whishart_kappa", invert_whishart_kappa);
+        model_node(info, "invert_whishart_df", invert_whishart_df);
 
-    template <class C>
-    void declare_stats(C &t) {
-        t.add("logprior", this, &DatedBranchOmegaModel::GetLogPrior);
-        t.add("lnL", this, &DatedBranchOmegaModel::GetLogLikelihood);
-        t.add("bomegamean", [&]() { return branchscaledomega->GetMean(); });
-        t.add("bomegavar", [&]() { return branchscaledomega->GetVar(); });
-        t.add("blengthmean", [&]() { return branchlength->GetMean(); });
-        t.add("blengthvar", [&]() { return branchlength->GetVar(); });
+        model_stat(info, "logprior",  [&]() { return DatedBranchOmegaModel::GetLogPrior();});
+        model_stat(info, "lnL", [&]() { return DatedBranchOmegaModel::GetLogLikelihood();});
+        model_stat(info, "bomegamean", [&]() { return branchscaledomega->GetMean(); });
+        model_stat(info, "bomegavar", [&]() { return branchscaledomega->GetVar(); });
+        model_stat(info, "blengthmean", [&]() { return branchlength->GetMean(); });
+        model_stat(info, "blengthvar", [&]() { return branchlength->GetVar(); });
         for (int i = 0; i < dimension; i++) {
             for (int j = 0; j <= i; j++) {
-                t.add("cov_" + std::to_string(i) + "_" + std::to_string(j),
+                model_stat(info, "cov_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
             }
         }
-        t.add("statent", [&]() { return Random::GetEntropy(nucstat); });
-        t.add("rrent", [&]() { return Random::GetEntropy(nucrelrate); });
+        model_stat(info, "statent", [&]() { return Random::GetEntropy(nucstat); });
+        model_stat(info, "rrent", [&]() { return Random::GetEntropy(nucrelrate); });
     }
 
     //-------------------
@@ -650,15 +647,15 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedBranchOmegaModel
 
     is >> datafile;
     is >> treefile;
-    m.reset(new DatedBranchOmegaModel(datafile, treefile));
-    Tracer tracer{*m, &DatedBranchOmegaModel::declare_model};
+    m = std::make_unique<DatedBranchOmegaModel>(datafile, treefile);
+    Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
     return is;
 }
 
 std::ostream &operator<<(std::ostream &os, DatedBranchOmegaModel &m) {
-    Tracer tracer{m, &DatedBranchOmegaModel::declare_model};
+    Tracer tracer{m};
     os << "DatedBranchOmega" << '\t';
     os << m.datafile << '\t';
     os << m.treefile << '\t';

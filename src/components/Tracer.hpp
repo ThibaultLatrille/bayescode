@@ -5,6 +5,7 @@
 #include "mpi_components/partition.hpp"
 #include "tags/decl_utils.hpp"
 #include "traits.hpp"
+#include "Eigen/Dense"
 
 class Tracer {
     std::vector<std::function<void(std::ostream&)>> header_to_stream;
@@ -108,4 +109,20 @@ class Tracer {
             is >> d;
         });
     }
+
+    void process_declaration(std::string const& name, Eigen::MatrixXd& v) {
+        for (int row = 0; row < v.rows(); row++) {
+            for (int col = 0; col < v.cols(); col++) {
+                process_declaration(name + "[" + std::to_string(row) + "," + std::to_string(col) + "]",
+                    v(row, col));
+            }
+        }
+    }
+
+    void process_declaration(std::string const& name, Eigen::VectorXd& v) {
+        for (int i = 0; i < v.size(); i++) {
+            process_declaration(name + "[" + std::to_string(i) + "]", v(i));
+        }
+    }
+
 };

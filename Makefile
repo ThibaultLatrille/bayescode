@@ -69,10 +69,6 @@ run-app-tests: all
 	_build/globom _test/globom_gal4
 	@echo "\n\e[35m\e[1m== Globom read ==============================================================\e[0m"
 	_build/readglobom _test/globom_gal4
-	@echo "\n\e[35m\e[1m== Dated Branch Omega run ===================================================\e[0m"
-	_build/dated -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/dated_gal4
-	@echo "\n\e[35m\e[1m== Dated Branch Omega restart ===============================================\e[0m"
-	_build/dated _test/dated_gal4
 	@echo "\n\e[35m\e[1m== CodonM2a run =============================================================\e[0m"
 	_build/codonm2a -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/codonM2a_gal4
 	@echo "\n\e[35m\e[1m== CodonM2a restart =========================================================\e[0m"
@@ -97,7 +93,10 @@ run-app-tests: all
 	_build/readmutselomega _test/mutselomega_gal4
 	@echo "\n\e[35m\e[1m== Diffsel double sparse ====================================================\e[0m"
 	@make --no-print-directory diffseldsparse
-	@make --no-print-directory run-multigeneglobom-test
+	@echo "\n\e[35m\e[1m== Dated Branch Omega run ===================================================\e[0m"
+	_build/dated -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/dated_gal4
+	@echo "\n\e[35m\e[1m== Dated Branch Omega restart ===============================================\e[0m"
+	_build/dated _test/dated_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel run =========================================================\e[0m"
 	_build/datedmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/datedmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel restart =====================================================\e[0m"
@@ -105,6 +104,7 @@ run-app-tests: all
 	@echo "\n\e[35m\e[1m== Dated MutSel read ========================================================\e[0m"
 	_build/readdatedmutsel --ss _test/datedmutsel_gal4
 
+# @make --no-print-directory run-multigeneglobom-test
 .PHONY: run-multigeneglobom-test
 run-multigeneglobom-test: all
 	@echo "\n\e[35m\e[1m== Multigene Single Omega ===================================================\e[0m"

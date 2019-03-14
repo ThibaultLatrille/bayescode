@@ -186,11 +186,6 @@ class SimpleBranchArray : public BranchArray<T> {
     //! interface
     std::vector<T> &GetArray() { return array; }
 
-    template <class Registrar>
-    void serialization_interface(Registrar &x) {
-        x.add(array);
-    }
-
     template <class Info>
     void declare_interface(Info info) {
         declare(info, "array", array);
