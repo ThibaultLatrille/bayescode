@@ -40,6 +40,7 @@ class AAMutSelOmegaCodonSubMatrix : public virtual NucCodonSubMatrix,
     double GetFitness(int a) const { return exp(Ne * log(aa[a])) + 1e-8; }
     double GetLogFitness(int a) const { return log(GetFitness(a)); }
 
+    std::tuple<double, double> GetFlowDNDS() const;
     double GetPredictedDNDS() const;
 
     void SetNe(double inNe) {

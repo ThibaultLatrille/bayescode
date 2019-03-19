@@ -68,7 +68,7 @@ void AAMutSelOmegaCodonSubMatrix::ComputeArray(int i) const {
     }
 }
 
-double AAMutSelOmegaCodonSubMatrix::GetPredictedDNDS() const {
+std::tuple<double, double> AAMutSelOmegaCodonSubMatrix::GetFlowDNDS() const {
     UpdateMatrix();
     double totom = 0;
     double totweight = 0;
@@ -109,5 +109,11 @@ double AAMutSelOmegaCodonSubMatrix::GetPredictedDNDS() const {
         totom += mStationary[i] * om;
         totweight += mStationary[i] * weight;
     }
-    return totom / totweight;
+    return std::make_tuple(totom, totweight);
+}
+
+double AAMutSelOmegaCodonSubMatrix::GetPredictedDNDS() const {
+    double dn = 0, dn0 = 0;
+    std::tie(dn, dn0) = GetFlowDNDS();
+    return dn / dn0;
 }

@@ -454,7 +454,7 @@ class DatedMutSelModel : public ChainComponent {
     void declare_interface(Info info) {
         model_node(info, "nodeages", *nodeages);
         model_node(info, "node_multivariate", *node_multivariate);
-        model_node(info, "covmatrix", precision_matrix);
+        model_node(info, "precision_matrix", precision_matrix);
         model_node(info, "invert_whishart_kappa", invert_whishart_kappa);
         model_node(info, "invert_whishart_df", invert_whishart_df);
         model_node(info, "nucrelrate", nucrelrate);
@@ -498,8 +498,6 @@ class DatedMutSelModel : public ChainComponent {
         model_stat(info, "BranchLengthSum", [this]() { return branchlength->GetSum(); });
         model_stat(info, "BranchLengthMean", [this]() { return branchlength->GetMean(); });
         model_stat(info, "BranchLengthVar", [this]() { return branchlength->GetVar(); });
-        model_stat(info, "BranchPopSizesMean", [this]() { return branchpopsize->GetMean(); });
-        model_stat(info, "BranchPopSizesVar", [this]() { return branchpopsize->GetVar(); });
         for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
             model_stat(info, "*NodePopSize_" + tree->node_name(node), (*nodepopsize)[node]);
             model_stat(info, "*NodeRate_" + tree->node_name(node), (*noderates)[node]);
@@ -1638,29 +1636,24 @@ class DatedMutSelModel : public ChainComponent {
     }
 
     double GetPredictedDNDS(Tree::BranchIndex branch) const {
-        double mean = 0;
+        double dn{0.}, dn0{0.};
         for (int k = 0; k < Ncat; k++) {
             if (occupancy->GetVal(k)) {
-                mean += occupancy->GetVal(k) *
-                        branchcomponentcodonmatrixarray->GetVal(branch, k).GetPredictedDNDS();
+                double cat_dn{0}, cat_dn0{0};
+                std::tie(cat_dn, cat_dn0) = branchcomponentcodonmatrixarray->GetVal(branch, k).GetFlowDNDS();
+                dn += occupancy->GetVal(k) * cat_dn;
+                dn0 += occupancy->GetVal(k) * cat_dn0;
             }
         }
-        mean /= Nsite;
-        return mean;
+        return dn / (dn0 * Nsite);
     }
 
     double GetPredictedDNDS() const {
-        double mean = 0;
-        for (int k = 0; k < Ncat; k++) {
-            if (occupancy->GetVal(k)) {
-                for (int branch{0}; branch < Nbranch; branch++) {
-                    mean += occupancy->GetVal(k) *
-                            branchcomponentcodonmatrixarray->GetVal(branch, k).GetPredictedDNDS();
-                }
-            }
+        double mean_dn_dn0{0};
+        for (int branch{0}; branch < Nbranch; branch++) {
+            mean_dn_dn0 += (*branchdnds)[branch];
         }
-        mean /= (Nsite * Nbranch);
-        return mean;
+        return mean_dn_dn0 / Nbranch;
     }
 
     const std::vector<double> &GetProfile(int i) const { return siteaafitnessarray->GetVal(i); }
