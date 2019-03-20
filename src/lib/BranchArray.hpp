@@ -173,9 +173,7 @@ class SimpleBranchArray : public BranchArray<T> {
         double m1 = GetMean();
         double m2 = 0;
         for (int i = 0; i < tree.nb_branches(); i++) { m2 += GetVal(i) * GetVal(i); }
-        m2 /= tree.nb_branches();
-        m2 -= m1 * m1;
-        return m2;
+        return m2 / tree.nb_branches() - m1 * m1;
     }
 
     //! return a const ref to the std::vector<T> of which this class is the

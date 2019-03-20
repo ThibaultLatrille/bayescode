@@ -1,11 +1,11 @@
 #pragma once
 
 #include <cassert>
+#include <cmath>
 #include "BranchArray.hpp"
 #include "Chronogram.hpp"
 #include "NodeArray.hpp"
 #include "Random.hpp"
-#include <cmath>
 
 /**
  * \brief A brownian univariate NodeProcess
@@ -28,15 +28,13 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
         for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(GetTree().nb_nodes()); node++) {
             (*this)[node] = EVector::Zero(dimensions);
         }
-        Sample();
+        // Sample();
     }
 
     //! sample all entries from prior
     void Sample() {
         (*this)[GetTree().root()].Zero(dimensions);
-        for (int dim = 0; dim < dimensions; dim++) {
-            (*this)[GetTree().root()](dim) = 0;
-        };
+        for (int dim = 0; dim < dimensions; dim++) { (*this)[GetTree().root()](dim) = 0; };
         SampleRecursive(GetTree().root());
     }
 
@@ -77,7 +75,7 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
     EVector GetContrast(Tree::NodeIndex node) const {
         assert(!GetTree().is_root(node));
         return (this->GetVal(node) - this->GetVal(GetTree().parent(node))) /
-                   sqrt(chronogram.GetVal(chronogram.GetTree().branch_index(node)));
+               sqrt(chronogram.GetVal(chronogram.GetTree().branch_index(node)));
     }
 
     //! get local log prob for a given node
@@ -118,6 +116,12 @@ class NodeProcess {
     double GetExpVal(Tree::NodeIndex node) const { return exp(GetVal(node)); }
 
     void SlidingMove(Tree::NodeIndex node, double m) { node_multivariate[node](dimension) += m; }
+
+    void SlidingMove(double m) {
+        for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(GetTree().nb_nodes()); node++) {
+            SlidingMove(node, m);
+        }
+    }
 
   protected:
     int dimension;

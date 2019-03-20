@@ -23,10 +23,27 @@ class DatedMutselArgParse : public BaseArgParse {
         false};
     ValueArg<std::string> profiles{
         "c", "profiles", "Preferences profiles (to clamp)", false, "", "string", cmd};
+    SwitchArg clamp_rates{"", "clamp_rates", "Clamp the branch mutation rate", cmd, false};
+    SwitchArg clamp_nuc_matrix{"", "clamp_nuc_matrix", "Clamp the nucleotide matrix", cmd, false};
+    SwitchArg clamp_corr_matrix{
+        "", "clamp_corr_matrix", "Clamp the correlation matrix", cmd, false};
+    SwitchArg clamp_tree{"", "clamp_tree", "Clamp the tree", cmd, false};
     SwitchArg polymorphism_aware{"p", "polymorphism_aware", "Use polymorphic data", cmd, false};
     ValueArg<unsigned> precision{
         "", "precision", "The precision of PRF computation", false, 6, "unsigned", cmd};
     SwitchArg debug{"d", "debug", "Debug mode (slower)", cmd, false};
+
+    void check() {
+        if (condition_aware.getValue()) {
+            cerr << "The switch parameter ([-b] or [--condition_aware]) is not yet implemented."
+                 << endl;
+        }
+        if (!profiles.getValue().empty()) {
+            cout << "Preferences are clamped (option [--profiles <string>]), thus options [--ncat] "
+                    "and [-basencat] are not used"
+                 << endl;
+        }
+    }
 };
 
 int main(int argc, char *argv[]) {
@@ -44,14 +61,18 @@ int main(int argc, char *argv[]) {
         InferenceAppArgParse args(cmd);
         DatedMutselArgParse datedmutsel_args(cmd);
         cmd.parse();
+        datedmutsel_args.check();
         chain_driver =
             new ChainDriver(cmd.chain_name(), args.every.getValue(), args.until.getValue());
-        model = unique_ptr<DatedMutSelModel>(
-            new DatedMutSelModel(args.alignment.getValue(), args.treefile.getValue(),
-                datedmutsel_args.profiles.getValue(), datedmutsel_args.ncat.getValue(),
-                datedmutsel_args.basencat.getValue(), datedmutsel_args.condition_aware.getValue(),
-                datedmutsel_args.polymorphism_aware.getValue(),
-                datedmutsel_args.precision.getValue(), datedmutsel_args.debug.getValue()));
+        model = unique_ptr<DatedMutSelModel>(new DatedMutSelModel(args.alignment.getValue(),
+            args.treefile.getValue(), datedmutsel_args.profiles.getValue(),
+            datedmutsel_args.ncat.getValue(), datedmutsel_args.basencat.getValue(),
+            datedmutsel_args.condition_aware.getValue(),
+            datedmutsel_args.polymorphism_aware.getValue(), datedmutsel_args.precision.getValue(),
+            datedmutsel_args.debug.getValue(), datedmutsel_args.clamp_rates.getValue(),
+            datedmutsel_args.clamp_nuc_matrix.getValue(), datedmutsel_args.clamp_corr_matrix.getValue(),
+            datedmutsel_args.clamp_tree.getValue()));
+
         model->Update();
     }
 

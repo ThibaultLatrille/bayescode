@@ -136,9 +136,8 @@ class DatedMutSelModel : public ChainComponent {
     bool condition_aware;
     bool polymorphism_aware;
     unsigned precision;
-    bool clamp_profiles = false;
-    bool debug = true;
-
+    bool debug;
+    bool clamp_profiles, clamp_rates, clamp_nuc_matrix, clamp_corr_matrix, clamp_tree;
     std::unique_ptr<const Tree> tree;
 
     FileSequenceAlignment *data;
@@ -233,7 +232,6 @@ class DatedMutSelModel : public ChainComponent {
 
     // global theta (4*Ne*u) used for polymorphism
     double theta_scale;
-    double thetamax;
     CompoundScaledMutationRate *theta;
 
     PolyProcess *polyprocess{nullptr};
@@ -272,7 +270,8 @@ class DatedMutSelModel : public ChainComponent {
     //! - polymorphism_aware: boolean to force using polymorphism data
     DatedMutSelModel(std::string indatafile, std::string intreefile, std::string inprofiles,
         int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware,
-        unsigned inprecision, bool indebug)
+        unsigned inprecision, bool indebug, bool inclamp_rates, bool inclamp_nuc_matrix,
+        bool inclamp_corr_matrix, bool inclamp_tree)
         : datafile(indatafile),
           treefile(intreefile),
           profiles(inprofiles),
@@ -280,6 +279,10 @@ class DatedMutSelModel : public ChainComponent {
           polymorphism_aware(inpolymorphism_aware),
           precision(inprecision),
           debug(indebug),
+          clamp_rates(inclamp_rates),
+          clamp_nuc_matrix(inclamp_nuc_matrix),
+          clamp_corr_matrix(inclamp_corr_matrix),
+          clamp_tree(inclamp_tree),
           baseNcat(inbaseNcat),
           Ncat(inNcat) {
         if (debug) { std::cout << "Debugging mode activated (slower)." << std::endl; }
@@ -324,7 +327,7 @@ class DatedMutSelModel : public ChainComponent {
         dimension = 2;
         invert_whishart_df = dimension + 1;
         invert_whishart_kappa = 1.0;
-        precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
+        precision_matrix = EMatrix::Identity(dimension, dimension) * 1.0;
 
         node_multivariate = new NodeMultivariateProcess(*chronogram, precision_matrix, dimension);
 
@@ -346,10 +349,12 @@ class DatedMutSelModel : public ChainComponent {
         nucstathyperinvconc = 1.0 / Nnuc;
 
         // nucleotide mutation matrix
-        nucrelrate.assign(Nrr, 0);
-        Random::DirichletSample(nucrelrate, std::vector<double>(Nrr, 1.0 / Nrr), ((double)Nrr));
-        nucstat.assign(Nnuc, 0);
-        Random::DirichletSample(nucstat, std::vector<double>(Nnuc, 1.0 / Nnuc), ((double)Nnuc));
+        nucrelrate.assign(Nrr, 1.0 / Nrr);
+        nucstat.assign(Nnuc, 1.0 / Nnuc);
+        if (!clamp_nuc_matrix){
+            Random::DirichletSample(nucrelrate, std::vector<double>(Nrr, 1.0 / Nrr), ((double)Nrr));
+            Random::DirichletSample(nucstat, std::vector<double>(Nnuc, 1.0 / Nnuc), ((double)Nnuc));
+        }
         nucmatrix = new GTRSubMatrix(Nnuc, nucrelrate, nucstat, true);
 
         // base distribution (can be skipped)
@@ -426,7 +431,6 @@ class DatedMutSelModel : public ChainComponent {
         theta_scale = 1e-5;
         theta =
             new CompoundScaledMutationRate(Ntaxa, theta_scale, noderates, nodepopsize, *taxonset);
-        thetamax = 0.1;
         if (polydata != nullptr) {
             poissonrandomfield =
                 new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
@@ -511,9 +515,10 @@ class DatedMutSelModel : public ChainComponent {
             }
         }
         model_stat(info, "MeanAAEntropy", [this]() { return GetMeanAAEntropy(); });
-        model_stat(info, 
-            "MeanComponentAAConcentration", [this]() { return GetMeanComponentAAConcentration(); });
-        model_stat(info, "MeanComponentAAEntropy", [this]() { return GetMeanComponentAAEntropy(); });
+        model_stat(info, "MeanComponentAAConcentration",
+            [this]() { return GetMeanComponentAAConcentration(); });
+        model_stat(
+            info, "MeanComponentAAEntropy", [this]() { return GetMeanComponentAAEntropy(); });
         model_stat(info, "NucStatEntropy", [&]() { return Random::GetEntropy(nucstat); });
         model_stat(info, "NucRateEntropy", [&]() { return Random::GetEntropy(nucrelrate); });
     }
@@ -653,7 +658,10 @@ class DatedMutSelModel : public ChainComponent {
         double total = 0;
         total += NodeMultivariateLogPrior();
         total += RootMultivariateLogPrior();
-        total += NucRatesLogPrior();
+
+        if (!clamp_nuc_matrix){
+            total += NucRatesLogPrior();
+        }
 
         if (!clamp_profiles) {
             if (baseNcat > 1) {
@@ -1042,19 +1050,31 @@ class DatedMutSelModel : public ChainComponent {
             CollectComponentPolySuffStat();
 
             CollectLengthSuffStat();
-            MoveNodeAges(1.0, 3);
-            MoveNodeAges(0.1, 3);
-            MoveNodeRates(1.0, 3);
-            MoveNodeRates(0.1, 3);
+            if (!clamp_tree){
+                MoveNodeAges(1.0, 3);
+                MoveNodeAges(0.1, 3);
+            }
+
+            if (!clamp_rates) {
+                MoveNodeRates(0.5, 3);
+                MoveNodeRates(0.05, 3);
+            } else {
+                MoveAllNodeRates(0.5, 3);
+                MoveAllNodeRates(0.05, 3);
+            }
 
             CollectSitePathSuffStat();
             CollectComponentPathSuffStat();
-            MoveNucRates();
-            MoveNodePopSize(1.0, 3);
-            MoveNodePopSize(0.1, 3);
+            if (!clamp_nuc_matrix){
+                MoveNucRates();
+            }
+            MoveNodePopSize(0.5, 3);
+            MoveNodePopSize(0.05, 3);
 
-            CollectScatterSuffStat();
-            SamplePrecisionMatrix();
+            if (!clamp_corr_matrix){
+                CollectScatterSuffStat();
+                SamplePrecisionMatrix();
+            }
 
             if (polyprocess != nullptr) { MoveTheta(); }
 
@@ -1127,13 +1147,34 @@ class DatedMutSelModel : public ChainComponent {
         }
     }
 
+    void MoveAllNodeRates(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) {
+            double logratio = -BranchLengthLogProb();
+
+            double m = tuning * (Random::Uniform() - 0.5);
+            noderates->SlidingMove(m);
+            branchrates->Update();
+            branchlength->Update();
+
+            double logprob = BranchLengthLogProb();
+            logratio += logprob;
+
+            bool accept = (log(Random::Uniform()) < logratio);
+            if (!accept) {
+                noderates->SlidingMove(-m);
+                branchrates->Update();
+                branchlength->Update();
+            }
+        }
+    }
+
     //! MH moves on branch rates (brownian process) for a focal node
     void MoveNodeProcessRate(Tree::NodeIndex node, double tuning) {
         double debug_logratio = 0;
         if (debug) { debug_logratio = -BranchLengthLogProb(); }
         double logratio = -LocalNodeRatesLogProb(node);
 
-        double m = tuning * noderates->GetSigma() * (Random::Uniform() - 0.5);
+        double m = tuning * (Random::Uniform() - 0.5);
         noderates->SlidingMove(node, m);
         UpdateLocalBranchRates(node);
 
@@ -1179,7 +1220,7 @@ class DatedMutSelModel : public ChainComponent {
 
         double logratio = -LocalNodePopSizeLogProb(node);
 
-        double m = tuning * nodepopsize->GetSigma() * (Random::Uniform() - 0.5);
+        double m = tuning * (Random::Uniform() - 0.5);
         nodepopsize->SlidingMove(node, m);
         UpdateLocalBranchPopSize(node);
 
@@ -1640,21 +1681,16 @@ class DatedMutSelModel : public ChainComponent {
         for (int k = 0; k < Ncat; k++) {
             if (occupancy->GetVal(k)) {
                 double cat_dn{0}, cat_dn0{0};
-                std::tie(cat_dn, cat_dn0) = branchcomponentcodonmatrixarray->GetVal(branch, k).GetFlowDNDS();
+                std::tie(cat_dn, cat_dn0) =
+                    branchcomponentcodonmatrixarray->GetVal(branch, k).GetFlowDNDS();
                 dn += occupancy->GetVal(k) * cat_dn;
                 dn0 += occupancy->GetVal(k) * cat_dn0;
             }
         }
-        return dn / (dn0 * Nsite);
+        return dn / dn0;
     }
 
-    double GetPredictedDNDS() const {
-        double mean_dn_dn0{0};
-        for (int branch{0}; branch < Nbranch; branch++) {
-            mean_dn_dn0 += (*branchdnds)[branch];
-        }
-        return mean_dn_dn0 / Nbranch;
-    }
+    double GetPredictedDNDS() const { return branchdnds->GetMean(); }
 
     const std::vector<double> &GetProfile(int i) const { return siteaafitnessarray->GetVal(i); }
 
@@ -1664,7 +1700,8 @@ class DatedMutSelModel : public ChainComponent {
 std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m) {
     std::string model_name, datafile, treefile, profiles;
     int Ncat, baseNcat;
-    bool condition_aware, polymorphism_aware, debug;
+    bool condition_aware, polymorphism_aware, debug, clamp_rates, clamp_nuc_matrix,
+        clamp_corr_matrix, clamp_tree;
     unsigned precision;
 
     is >> model_name;
@@ -1675,9 +1712,11 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
 
     is >> datafile >> treefile >> profiles;
     is >> Ncat >> baseNcat;
-    is >> condition_aware >> polymorphism_aware >> precision >> debug;
-    m = std::make_unique<DatedMutSelModel>(datafile, treefile, profiles, Ncat, baseNcat, condition_aware,
-        polymorphism_aware, precision, debug);
+    is >> condition_aware >> polymorphism_aware >> precision >> debug >> clamp_rates >>
+        clamp_nuc_matrix >> clamp_corr_matrix >> clamp_tree;
+    m = std::make_unique<DatedMutSelModel>(datafile, treefile, profiles, Ncat, baseNcat,
+        condition_aware, polymorphism_aware, precision, debug, clamp_rates, clamp_nuc_matrix,
+        clamp_corr_matrix, clamp_tree);
     Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
@@ -1697,6 +1736,10 @@ std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m) {
     os << m.polymorphism_aware << '\t';
     os << m.precision << '\t';
     os << m.debug << '\t';
+    os << m.clamp_rates << '\t';
+    os << m.clamp_nuc_matrix << '\t';
+    os << m.clamp_corr_matrix << '\t';
+    os << m.clamp_tree << '\t';
     tracer.write_line(os);
     return os;
 }
