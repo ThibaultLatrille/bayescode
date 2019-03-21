@@ -1522,12 +1522,6 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         return tot / Ncat;
     }
 
-    //! return entropy of vector of nucleotide exchange rates
-    double GetNucRREntropy() const { return Random::GetEntropy(nucrelrate); }
-
-    //! return entropy of vector of equilibrium nucleotide composition
-    double GetNucStatEntropy() const { return Random::GetEntropy(nucrelrate); }
-
     double GetPredictedDNDS() const {
         double mean = 0;
         for (int i = 0; i < Ncat; i++) {
@@ -1540,13 +1534,6 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     }
 
     const std::vector<double> &GetProfile(int i) const { return siteaafitnessarray->GetVal(i); }
-
-    void Monitor(std::ostream &os) const {
-        os << totchrono.GetTime() << '\t' << aachrono.GetTime() << '\t' << basechrono.GetTime()
-           << '\n';
-        os << "prop time in aa moves  : " << aachrono.GetTime() / totchrono.GetTime() << '\n';
-        os << "prop time in base moves: " << basechrono.GetTime() / totchrono.GetTime() << '\n';
-    }
 
     void ToStream(std::ostream &os) const {
         os << "AAMutSelDSBDPOmega" << '\t';

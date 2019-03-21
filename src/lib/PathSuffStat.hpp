@@ -74,19 +74,11 @@ class PathSuffStat : public SuffStat {
     void AddSuffStat(const PhyloProcess &process) { process.AddPathSuffStat(*this); }
 
     void Add(const PathSuffStat &suffstat) {
-        for (std::map<int, int>::const_iterator i = suffstat.GetRootCountMap().begin();
-             i != suffstat.GetRootCountMap().end(); i++) {
-            AddRootCount(i->first, i->second);
+        for (auto const &i : suffstat.GetRootCountMap()) { AddRootCount(i.first, i.second); }
+        for (auto const &i : suffstat.GetPairCountMap()) {
+            AddPairCount(i.first.first, i.first.second, i.second);
         }
-        for (std::map<std::pair<int, int>, int>::const_iterator i =
-                 suffstat.GetPairCountMap().begin();
-             i != suffstat.GetPairCountMap().end(); i++) {
-            AddPairCount(i->first.first, i->first.second, i->second);
-        }
-        for (std::map<int, double>::const_iterator i = suffstat.GetWaitingTimeMap().begin();
-             i != suffstat.GetWaitingTimeMap().end(); i++) {
-            AddWaitingTime(i->first, i->second);
-        }
+        for (auto const &i : suffstat.GetWaitingTimeMap()) { AddWaitingTime(i.first, i.second); }
     }
 
     PathSuffStat &operator+=(const PathSuffStat &from) {
@@ -95,20 +87,19 @@ class PathSuffStat : public SuffStat {
     }
 
     int GetRootCount(int state) const {
-        std::map<int, int>::const_iterator i = rootcount.find(state);
+        auto i = rootcount.find(state);
         if (i == rootcount.end()) { return 0; }
         return i->second;
     }
 
     int GetPairCount(int state1, int state2) const {
-        std::map<std::pair<int, int>, int>::const_iterator i =
-            paircount.find(std::pair<int, int>(state1, state2));
+        auto i = paircount.find(std::pair<int, int>(state1, state2));
         if (i == paircount.end()) { return 0; }
         return i->second;
     }
 
     double GetWaitingTime(int state) const {
-        std::map<int, double>::const_iterator i = waitingtime.find(state);
+        auto i = waitingtime.find(state);
         if (i == waitingtime.end()) { return 0; }
         return i->second;
     }
@@ -117,16 +108,10 @@ class PathSuffStat : public SuffStat {
     double GetLogProb(const SubMatrix &mat) const {
         double total = 0;
         auto stat = mat.GetStationary();
-        for (std::map<int, int>::const_iterator i = rootcount.begin(); i != rootcount.end(); i++) {
-            total += i->second * log(stat[i->first]);
-        }
-        for (std::map<int, double>::const_iterator i = waitingtime.begin(); i != waitingtime.end();
-             i++) {
-            total += i->second * mat(i->first, i->first);
-        }
-        for (std::map<std::pair<int, int>, int>::const_iterator i = paircount.begin();
-             i != paircount.end(); i++) {
-            total += i->second * log(mat(i->first.first, i->first.second));
+        for (auto const &i : rootcount) { total += i.second * log(stat[i.first]); }
+        for (auto const &i : waitingtime) { total += i.second * mat(i.first, i.first); }
+        for (auto const &i : paircount) {
+            total += i.second * log(mat(i.first.first, i.first.second));
         }
         return total;
     }
@@ -262,16 +247,14 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
 
     //! add path sufficient statistics from PhyloProcess (site- and
     //! branch-heterogeneous case)
-    void AddSuffStat(const PhyloProcess &process) {
-        process.AddPathSuffStat(*this);
-    }
+    void AddSuffStat(const PhyloProcess &process) { process.AddPathSuffStat(*this); }
 
     //! \brief add suffstatarray given as argument to this array based on the allocations provided
     //! as the second argument (mixture models)
-    void Add(const BidimSelector<PathSuffStat> &suffstatarray, const Selector<int> &alloc) {
-        for (int row = 0; row < this->GetNrow(); row++) {
-            for (int col = 0; col < this->GetNcol(); col++) {
-                (*this)(row, alloc.GetVal(col)) += suffstatarray.GetVal(row, col);
+    void Add(const BidimSelector<PathSuffStat> &suffstatarray, const Selector<int> &col_alloc) {
+        for (int i = 0; i < this->GetNrow(); i++) {
+            for (int j = 0; j < this->GetNcol(); j++) {
+                (*this)(i, col_alloc.GetVal(j)) += suffstatarray.GetVal(i, j);
             }
         }
     }
@@ -279,8 +262,10 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
     //! return total log prob (summed over all items), given a bi-dimensional
     //! array of rate matrices
     double GetLogProb(const BidimSelector<SubMatrix> &matrixarray) const {
+        assert(matrixarray.GetNcol() == this->GetNcol());
+        assert(matrixarray.GetNrow() == this->GetNrow());
         double total = 0;
-        for (int j = 0; j < this->GetNcol(); j++) { total += GetColLogProb(j, matrixarray); }
+        for (int i = 0; i < this->GetNrow(); i++) { total += GetRowLogProb(i, matrixarray); }
         return total;
     }
 
@@ -304,13 +289,12 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
 
     //! return log prob summed over a given column (and only for items for which
     //! flag is non 0)
-    double GetLogProb(
-        int j, const std::vector<int> &flag, const BidimSelector<SubMatrix> &matrixarray) const {
+    double GetLogProb(int j, const std::vector<int> &row_flag,
+        const BidimSelector<SubMatrix> &matrixarray) const {
         double total = 0;
         for (int i = 0; i < this->GetNrow(); i++) {
-            if (flag[i]) { total += GetVal(i, j).GetLogProb(matrixarray.GetVal(i, j)); }
+            if (row_flag[i]) { total += GetVal(i, j).GetLogProb(matrixarray.GetVal(i, j)); }
         }
         return total;
     }
-
 };
