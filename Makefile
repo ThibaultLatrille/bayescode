@@ -98,7 +98,7 @@ run-app-tests: all
 	@echo "\n\e[35m\e[1m== Dated Branch Omega restart ===============================================\e[0m"
 	_build/dated _test/dated_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel run =========================================================\e[0m"
-	_build/datedmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/datedmutsel_gal4
+	_build/datedmutsel --ncat 10 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/datedmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel restart =====================================================\e[0m"
 	_build/datedmutsel _test/datedmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel read ========================================================\e[0m"

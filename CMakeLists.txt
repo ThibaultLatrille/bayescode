@@ -68,6 +68,10 @@ target_link_libraries(dated bayescode_lib tree_lib)
 add_executable(datedmutsel "src/DatedMutSel.cpp")
 target_link_libraries(datedmutsel bayescode_lib tree_lib)
 
+# Branch Ne () chronogram (branchmutsel)
+add_executable(branchmutsel "src/DatedBranchMutSel.cpp")
+target_link_libraries(branchmutsel bayescode_lib tree_lib)
+
 # Read Branch Ne chronogram (readdatedmutsel)
 add_executable(readdatedmutsel "src/ReadDatedMutSel.cpp")
 target_link_libraries(readdatedmutsel bayescode_lib tree_lib)

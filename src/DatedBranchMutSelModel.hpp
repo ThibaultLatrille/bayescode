@@ -130,7 +130,7 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
     return std::make_tuple(fitness_profiles, alloc);
 }
 
-class DatedMutSelModel : public ChainComponent {
+class DatedBranchMutSelModel : public ChainComponent {
     std::string datafile, treefile, profiles;
 
     bool condition_aware;
@@ -249,7 +249,7 @@ class DatedMutSelModel : public ChainComponent {
     SimpleBranchArray<double> *branchdnds;
 
   public:
-    friend std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m);
+    friend std::ostream &operator<<(std::ostream &os, DatedBranchMutSelModel &m);
 
     //-------------------
     // Construction and allocation
@@ -268,7 +268,7 @@ class DatedMutSelModel : public ChainComponent {
     //! - baseNcat: truncation of the second-level stick-breaking process (by
     //! default: 1)
     //! - polymorphism_aware: boolean to force using polymorphism data
-    DatedMutSelModel(std::string indatafile, std::string intreefile, std::string inprofiles,
+    DatedBranchMutSelModel(std::string indatafile, std::string intreefile, std::string inprofiles,
         int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware,
         unsigned inprecision, bool indebug, bool inclamp_rates, bool inclamp_pop_sizes,
         bool inclamp_nuc_matrix, bool inclamp_corr_matrix)
@@ -450,7 +450,7 @@ class DatedMutSelModel : public ChainComponent {
         branchlengthpathsuffstatarray = new PoissonSuffStatBranchArray(*tree);
     }
 
-    virtual ~DatedMutSelModel() = default;
+    virtual ~DatedBranchMutSelModel() = default;
 
     void move(int it) override { Move(); }
 
@@ -1254,25 +1254,25 @@ class DatedMutSelModel : public ChainComponent {
 
     //! MH move on theta
     void MoveTheta() {
-        Move::Scaling(theta_scale, 1.0, 10, &DatedMutSelModel::ThetaLogProb,
-            &DatedMutSelModel::NoUpdate, this);
-        Move::Scaling(theta_scale, 0.3, 10, &DatedMutSelModel::ThetaLogProb,
-            &DatedMutSelModel::NoUpdate, this);
+        Move::Scaling(theta_scale, 1.0, 10, &DatedBranchMutSelModel::ThetaLogProb,
+            &DatedBranchMutSelModel::NoUpdate, this);
+        Move::Scaling(theta_scale, 0.3, 10, &DatedBranchMutSelModel::ThetaLogProb,
+            &DatedBranchMutSelModel::NoUpdate, this);
     }
 
     //! MH move on nucleotide rate parameters
     void MoveNucRates() {
-        Move::Profile(nucrelrate, 0.1, 1, 3, &DatedMutSelModel::NucRatesLogProb,
-            &DatedMutSelModel::UpdateMatrices, this);
-        Move::Profile(nucrelrate, 0.03, 3, 3, &DatedMutSelModel::NucRatesLogProb,
-            &DatedMutSelModel::UpdateMatrices, this);
-        Move::Profile(nucrelrate, 0.01, 3, 3, &DatedMutSelModel::NucRatesLogProb,
-            &DatedMutSelModel::UpdateMatrices, this);
+        Move::Profile(nucrelrate, 0.1, 1, 3, &DatedBranchMutSelModel::NucRatesLogProb,
+            &DatedBranchMutSelModel::UpdateMatrices, this);
+        Move::Profile(nucrelrate, 0.03, 3, 3, &DatedBranchMutSelModel::NucRatesLogProb,
+            &DatedBranchMutSelModel::UpdateMatrices, this);
+        Move::Profile(nucrelrate, 0.01, 3, 3, &DatedBranchMutSelModel::NucRatesLogProb,
+            &DatedBranchMutSelModel::UpdateMatrices, this);
 
-        Move::Profile(nucstat, 0.1, 1, 3, &DatedMutSelModel::NucRatesLogProb,
-            &DatedMutSelModel::UpdateMatrices, this);
-        Move::Profile(nucstat, 0.01, 1, 3, &DatedMutSelModel::NucRatesLogProb,
-            &DatedMutSelModel::UpdateMatrices, this);
+        Move::Profile(nucstat, 0.1, 1, 3, &DatedBranchMutSelModel::NucRatesLogProb,
+            &DatedBranchMutSelModel::UpdateMatrices, this);
+        Move::Profile(nucstat, 0.01, 1, 3, &DatedBranchMutSelModel::NucRatesLogProb,
+            &DatedBranchMutSelModel::UpdateMatrices, this);
     }
 
     //! MCMC module for the mixture amino-acid fitness profiles
@@ -1471,10 +1471,10 @@ class DatedMutSelModel : public ChainComponent {
 
     //! MH move on kappa, concentration parameter of the mixture
     void MoveKappa() {
-        Move::Scaling(kappa, 1.0, 10, &DatedMutSelModel::StickBreakingHyperLogProb,
-            &DatedMutSelModel::NoUpdate, this);
-        Move::Scaling(kappa, 0.3, 10, &DatedMutSelModel::StickBreakingHyperLogProb,
-            &DatedMutSelModel::NoUpdate, this);
+        Move::Scaling(kappa, 1.0, 10, &DatedBranchMutSelModel::StickBreakingHyperLogProb,
+            &DatedBranchMutSelModel::NoUpdate, this);
+        Move::Scaling(kappa, 0.3, 10, &DatedBranchMutSelModel::StickBreakingHyperLogProb,
+            &DatedBranchMutSelModel::NoUpdate, this);
     }
 
     //! MCMC module for the base mixture
@@ -1618,10 +1618,10 @@ class DatedMutSelModel : public ChainComponent {
 
     //! MH move on basekappa, concentration parameter of the base mixture
     void MoveBaseKappa() {
-        Move::Scaling(basekappa, 1.0, 10, &DatedMutSelModel::BaseStickBreakingHyperLogProb,
-            &DatedMutSelModel::NoUpdate, this);
-        Move::Scaling(basekappa, 0.3, 10, &DatedMutSelModel::BaseStickBreakingHyperLogProb,
-            &DatedMutSelModel::NoUpdate, this);
+        Move::Scaling(basekappa, 1.0, 10, &DatedBranchMutSelModel::BaseStickBreakingHyperLogProb,
+            &DatedBranchMutSelModel::NoUpdate, this);
+        Move::Scaling(basekappa, 0.3, 10, &DatedBranchMutSelModel::BaseStickBreakingHyperLogProb,
+            &DatedBranchMutSelModel::NoUpdate, this);
     }
 
     //-------------------
@@ -1691,7 +1691,7 @@ class DatedMutSelModel : public ChainComponent {
     void ToStream(std::ostream &os) { os << *this; }
 };
 
-std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m) {
+std::istream &operator>>(std::istream &is, std::unique_ptr<DatedBranchMutSelModel> &m) {
     std::string model_name, datafile, treefile, profiles;
     int Ncat, baseNcat;
     bool condition_aware, polymorphism_aware, debug, clamp_rates, clamp_pop_sizes, clamp_nuc_matrix,
@@ -1699,8 +1699,8 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
     unsigned precision;
 
     is >> model_name;
-    if (model_name != "DatedMutSelModel") {
-        std::cerr << "Expected DatedMutSelModel for model name, got " << model_name << "\n";
+    if (model_name != "DatedBranchMutSelModel") {
+        std::cerr << "Expected DatedBranchMutSelModel for model name, got " << model_name << "\n";
         exit(1);
     }
 
@@ -1708,7 +1708,7 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
     is >> Ncat >> baseNcat;
     is >> condition_aware >> polymorphism_aware >> precision >> debug >> clamp_rates >>
         clamp_pop_sizes >> clamp_nuc_matrix >> clamp_corr_matrix;
-    m = std::make_unique<DatedMutSelModel>(datafile, treefile, profiles, Ncat, baseNcat,
+    m = std::make_unique<DatedBranchMutSelModel>(datafile, treefile, profiles, Ncat, baseNcat,
         condition_aware, polymorphism_aware, precision, debug, clamp_rates, clamp_pop_sizes,
         clamp_nuc_matrix, clamp_corr_matrix);
     Tracer tracer{*m};
@@ -1717,9 +1717,9 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedMutSelModel> &m)
     return is;
 }
 
-std::ostream &operator<<(std::ostream &os, DatedMutSelModel &m) {
+std::ostream &operator<<(std::ostream &os, DatedBranchMutSelModel &m) {
     Tracer tracer{m};
-    os << "DatedMutSelModel" << '\t';
+    os << "DatedBranchMutSelModel" << '\t';
     os << m.datafile << '\t';
     os << m.treefile << '\t';
     if (m.profiles.empty()) { m.profiles = "Null"; }
