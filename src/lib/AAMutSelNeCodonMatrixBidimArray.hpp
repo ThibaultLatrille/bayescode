@@ -23,18 +23,17 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
     //! fitness profiles and an array of population size.
     MutSelNeCodonMatrixBidimArray(const CodonStateSpace *incodonstatespace,
         const SubMatrix *innucmatrix, const Selector<std::vector<double>> *infitnessarray,
-        const std::vector<double> *inNe)
+        const std::vector<double> &pop_size_array)
         : codonstatespace(incodonstatespace),
           nucmatrix(innucmatrix),
           aafitnessarray(infitnessarray),
-          popsizearray(inNe),
-          matrixbidimarray(inNe->size(),
+          matrixbidimarray(pop_size_array.size(),
               std::vector<AAMutSelOmegaCodonSubMatrix *>(infitnessarray->GetSize(), nullptr)) {
         std::cout << GetNrow() << "\t" << GetNcol() << "\n";
         for (int i = 0; i < GetNrow(); i++) {
             for (int j = 0; j < GetNcol(); j++) {
                 matrixbidimarray[i][j] = new AAMutSelOmegaCodonSubMatrix(codonstatespace, nucmatrix,
-                    infitnessarray->GetVal(j), 1.0, popsizearray->at(i));
+                    infitnessarray->GetVal(j), 1.0, pop_size_array.at(i));
             }
         }
         assert(static_cast<int>(matrixbidimarray.size()) == GetNrow());
@@ -47,7 +46,7 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
     }
 
     //! return the number of rows (number of branches)
-    int GetNrow() const override { return popsizearray->size(); }
+    int GetNrow() const override { return matrixbidimarray.size(); }
     //! return the number of columns (number of sites)
     int GetNcol() const override { return aafitnessarray->GetSize(); }
 
@@ -70,7 +69,7 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
         for (int j = 0; j < this->GetNcol(); j++) { (*this)(i, j).SetNe(Ne); }
     }
 
-    void SetNe(std::vector<double> &Ne) {
+    void SetNe(std::vector<double> const &Ne) {
         assert(GetNcol() > 0);
         assert(GetNrow() > 0);
         assert(GetNrow() == static_cast<int>(Ne.size()));
@@ -112,7 +111,6 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
     const CodonStateSpace *codonstatespace;
     const SubMatrix *nucmatrix;
     const Selector<std::vector<double>> *aafitnessarray;
-    const std::vector<double> *popsizearray;
     std::vector<std::vector<AAMutSelOmegaCodonSubMatrix *>> matrixbidimarray;
 };
 

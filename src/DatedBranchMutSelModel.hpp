@@ -160,15 +160,13 @@ class DatedBranchMutSelModel : public ChainComponent {
     double invert_whishart_kappa;
     // Covariance matrix
     EMatrix precision_matrix;
-    NodeMultivariateProcess *node_multivariate;
+    BranchWiseMultivariateProcess *branchwise_multivariate;
+    LeafMultivariateProcess *leaf_multivariate{nullptr};
 
     // Branch rates (brownian process)
-    NodeProcess *noderates;
-    BranchProcess *branchrates;
-
+    BranchWiseProcess *branchrates;
     // Branch Population size (brownian process)
-    NodeProcess *nodepopsize;
-    BranchProcess *branchpopsize;
+    BranchWiseProcess *branchpopsize;
 
     // Branch lengths (product of branch rates and chronogram)
     BranchwiseProduct *branchlength;
@@ -232,7 +230,7 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     // global theta (4*Ne*u) used for polymorphism
     double theta_scale;
-    CompoundScaledMutationRate *theta;
+    BranchWiseProcessScaledMutationRate *theta;
 
     PolyProcess *polyprocess{nullptr};
     PoissonRandomField *poissonrandomfield{nullptr};
@@ -285,7 +283,6 @@ class DatedBranchMutSelModel : public ChainComponent {
           clamp_corr_matrix(inclamp_corr_matrix),
           baseNcat(inbaseNcat),
           Ncat(inNcat) {
-        if (debug) { std::cout << "Debugging mode activated (slower)." << std::endl; }
         data = new FileSequenceAlignment(datafile);
         codondata = new CodonSequenceAlignment(data, true);
 
@@ -329,15 +326,19 @@ class DatedBranchMutSelModel : public ChainComponent {
         invert_whishart_kappa = 1.0;
         precision_matrix = EMatrix::Identity(dimension, dimension) * 1.0;
 
-        node_multivariate = new NodeMultivariateProcess(*chronogram, precision_matrix, dimension);
+        branchwise_multivariate =
+            new BranchWiseMultivariateProcess(*chronogram, precision_matrix, dimension);
+        if (polydata != nullptr) {
+            leaf_multivariate = new LeafMultivariateProcess(*branchwise_multivariate, *taxonset);
+            theta = new BranchWiseProcessScaledMutationRate(
+                Ntaxa, theta_scale, *leaf_multivariate, *taxonset);
+        }
 
         // Branch omega (brownian process)
-        nodepopsize = new NodeProcess(*node_multivariate, 0);
-        branchpopsize = new BranchProcess(*nodepopsize);
+        branchpopsize = new BranchWiseProcess(*branchwise_multivariate, 0);
 
         // Branch rates (brownian process)
-        noderates = new NodeProcess(*node_multivariate, 1);
-        branchrates = new BranchProcess(*noderates);
+        branchrates = new BranchWiseProcess(*branchwise_multivariate, 1);
 
         // Branch lengths (product of branch rates and chronogram)
         branchlength = new BranchwiseProduct(*chronogram, *branchrates);
@@ -414,14 +415,14 @@ class DatedBranchMutSelModel : public ChainComponent {
 
         // codon matrices per branch and per site
         branchcomponentcodonmatrixarray = new MutSelNeCodonMatrixBidimArray(
-            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, &branchpopsize->GetArray());
+            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, branchpopsize->GetArray());
 
         // sub matrices per branch and per site
         branchsitecodonmatrixarray = new BranchComponentMatrixSelector<SubMatrix>(
             branchcomponentcodonmatrixarray, sitealloc, *tree);
 
-        rootcomponentcodonmatrixarray = new AAMutSelNeCodonSubMatrixArray(GetCodonStateSpace(),
-            nucmatrix, componentaafitnessarray, nodepopsize->GetExpVal(tree->root()));
+        rootcomponentcodonmatrixarray = new AAMutSelNeCodonSubMatrixArray(
+            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, branchpopsize->GetRootVal());
 
         // sub matrices for root, across sites
         rootsitecodonmatrixarray =
@@ -429,8 +430,6 @@ class DatedBranchMutSelModel : public ChainComponent {
 
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
         theta_scale = 1e-5;
-        theta =
-            new CompoundScaledMutationRate(Ntaxa, theta_scale, noderates, nodepopsize, *taxonset);
         if (polydata != nullptr) {
             poissonrandomfield =
                 new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
@@ -457,7 +456,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     template <class Info>
     void declare_interface(Info info) {
         model_node(info, "nodeages", *nodeages);
-        model_node(info, "node_multivariate", *node_multivariate);
+        model_node(info, "branchwise_multivariate", *branchwise_multivariate);
         model_node(info, "precision_matrix", precision_matrix);
         model_node(info, "invert_whishart_kappa", invert_whishart_kappa);
         model_node(info, "invert_whishart_df", invert_whishart_df);
@@ -497,22 +496,16 @@ class DatedBranchMutSelModel : public ChainComponent {
             }
         }
 
-        model_stat(info, "BranchRatesMean", [this]() { return branchrates->GetMean(); });
-        model_stat(info, "BranchRatesVar", [this]() { return branchrates->GetVar(); });
         model_stat(info, "BranchLengthSum", [this]() { return branchlength->GetSum(); });
         model_stat(info, "BranchLengthMean", [this]() { return branchlength->GetMean(); });
         model_stat(info, "BranchLengthVar", [this]() { return branchlength->GetVar(); });
-        for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
-            model_stat(info, "*NodePopSize_" + tree->node_name(node), (*nodepopsize)[node]);
-            model_stat(info, "*NodeRate_" + tree->node_name(node), (*noderates)[node]);
-            if (!tree->is_root(node)) {
-                model_stat(info, "*BranchdNdS_" + tree->node_name(node),
-                    (*branchdnds)[tree->branch_index(node)]);
-                model_stat(info, "*BranchTime_" + tree->node_name(node),
-                    (*chronogram)[tree->branch_index(node)]);
-                model_stat(info, "*BranchLength_" + tree->node_name(node),
-                    (*branchlength)[tree->branch_index(node)]);
-            }
+        for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
+            string b_name = tree->node_name(tree->node_index(branch));
+            model_stat(info, "*BranchPopSize_" + b_name, (*branchpopsize)[branch]);
+            model_stat(info, "*BranchRate_" + b_name, (*branchrates)[branch]);
+            model_stat(info, "*BranchdNdS_" + b_name, (*branchdnds)[branch]);
+            model_stat(info, "*BranchTime_" + b_name, (*chronogram)[branch]);
+            model_stat(info, "*BranchLength_" + b_name, (*branchlength)[branch]);
         }
         model_stat(info, "MeanAAEntropy", [this]() { return GetMeanAAEntropy(); });
         model_stat(info, "MeanComponentAAConcentration",
@@ -551,7 +544,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     void UpdateCodonMatrices() {
         branchcomponentcodonmatrixarray->SetNe(branchpopsize->GetArray());
         branchcomponentcodonmatrixarray->CorruptCodonMatrices();
-        rootcomponentcodonmatrixarray->SetNe(nodepopsize->GetExpVal(tree->root()));
+        rootcomponentcodonmatrixarray->SetNe(branchpopsize->GetRootVal());
         rootcomponentcodonmatrixarray->UpdateCodonMatrices();
     }
 
@@ -599,28 +592,9 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! \brief Update the branch rates and lengths around the focal node.
     //!
     //! Update needed when the rate (NodeProcess) of the focal node is changed.
-    void UpdateLocalBranchRates(Tree::NodeIndex node) {
-        branchrates->UpdateLocal(node);
-        branchlength->UpdateLocal(node);
-    }
+    void UpdateBranchRates(Tree::BranchIndex branch) { branchlength->UpdateBranch(branch); }
 
-    //! \brief Update the branch omega around the focal node.
-    //!
-    //! Update needed when the omega (NodeProcess) of the focal node is changed.
-    void UpdateLocalBranchPopSize(Tree::NodeIndex node) {
-        branchpopsize->UpdateLocal(node);
-
-        if (tree->is_root(node)) {
-            rootcomponentcodonmatrixarray->SetNe(nodepopsize->GetExpVal(tree->root()));
-            rootcomponentcodonmatrixarray->UpdateCodonMatrices();
-        } else {
-            UpdateBranchPopSize(node);
-        }
-        for (Tree::NodeIndex const &child : tree->children(node)) { UpdateBranchPopSize(child); }
-    }
-
-    void UpdateBranchPopSize(Tree::NodeIndex node) {
-        Tree::BranchIndex branch = tree->branch_index(node);
+    void UpdateBranchPopSize(Tree::BranchIndex branch) {
         branchcomponentcodonmatrixarray->SetRowNe(branch, branchpopsize->GetVal(branch));
         branchcomponentcodonmatrixarray->CorruptRowCodonMatrices(branch);
     }
@@ -633,7 +607,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     }
 
     void UpdateStats() {
-        theta->Update();
+        if (polyprocess != nullptr) { theta->Update(); }
         for (Tree::BranchIndex b = 0; b < Nbranch; b++) { (*branchdnds)[b] = GetPredictedDNDS(b); }
     }
 
@@ -656,7 +630,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! \brief return total log prior (up to some constant)
     double GetLogPrior() const {
         double total = 0;
-        total += NodeMultivariateLogPrior();
+        total += BranchMultivariateLogPrior();
         total += RootMultivariateLogPrior();
 
         if (!clamp_nuc_matrix) { total += NucRatesLogPrior(); }
@@ -672,7 +646,10 @@ class DatedBranchMutSelModel : public ChainComponent {
             total += AALogPrior();
         }
 
-        if (polyprocess != nullptr) { total += ThetaLogPrior(); }
+        if (polyprocess != nullptr) {
+            total += ThetaScaleLogPrior();
+            total += ThetaLogPrior();
+        }
         return total;
     }
 
@@ -684,18 +661,28 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     // Multivariate prior
     //! log prior over branch rates (brownian process)
-    double NodeMultivariateLogPrior() const { return node_multivariate->GetLogProb(); }
+    double BranchMultivariateLogPrior() const { return branchwise_multivariate->GetLogProb(); }
+
+    //! log prior over branch rates (brownian process)
+    double BranchMultivariateLogPrior(Tree::BranchIndex branch) const {
+        return branchwise_multivariate->GetLogProb(branch);
+    }
 
     //! log prior of branch rate (brownian process) around of focal node
-    double LocalNodeMultivariateLogPrior(Tree::NodeIndex node) const {
-        return node_multivariate->GetLocalLogProb(node);
+    double LocalBranchMultivariateLogPrior(Tree::NodeIndex node) const {
+        return branchwise_multivariate->GetLocalLogProb(node);
     }
 
     //! log prior of
-    double RootMultivariateLogPrior() const { return node_multivariate->GetLogProb(tree->root()); }
+    double RootMultivariateLogPrior() const {
+        return branchwise_multivariate->GetLogProb(tree->root());
+    }
 
-    //! log prior over theta
-    double ThetaLogPrior() const { return 0.0; }
+    double ThetaScaleLogPrior() const { return 0.0; }
+
+    double ThetaLogPrior() const { return leaf_multivariate->GetLogProb(); }
+
+    double ThetaLogPrior(int taxon) const { return leaf_multivariate->GetTaxonLogProb(taxon); }
 
     //! log prior over nuc rates rho and pi (uniform)
     double NucRatesLogPrior() const {
@@ -791,7 +778,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! collect sufficient statistics for sampling the correlation matrix of the brownian process
     void CollectScatterSuffStat() {
         scattersuffstat->Clear();
-        scattersuffstat->AddSuffStat(*node_multivariate);
+        scattersuffstat->AddSuffStat(*branchwise_multivariate, leaf_multivariate);
     }
 
     //! collect suff stats for moving center and concentration parameters of the
@@ -799,16 +786,6 @@ class DatedBranchMutSelModel : public ChainComponent {
     void CollectBaseSuffStat() {
         basesuffstatarray->Clear();
         componentaafitnessarray->AddSuffStat(*basesuffstatarray, *componentalloc);
-    }
-
-    void CollectSuffStat() {
-        CollectLengthSuffStat();
-        CollectSitePathSuffStat();
-        CollectSitePolySuffStat();
-        CollectComponentPathSuffStat();
-        CollectComponentPolySuffStat();
-        CollectScatterSuffStat();
-        CollectBaseSuffStat();
     }
 
     //-------------------
@@ -861,9 +838,12 @@ class DatedBranchMutSelModel : public ChainComponent {
         }
     }
 
-    //! return log prob of the current substitution mapping, as a function of the
-    //! current codon substitution process
-    double PathLogProb() const { return GetLogPrior() + PathSuffStatLogProb(); }
+    //! log prob factor to be recomputed when Theta=4*Ne*u
+    double ThetaScaleLogProb() const { return ThetaScaleLogPrior() + PolySuffStatLogProb(); }
+
+    double ThetaLogProb(int taxon) const {
+        return ThetaLogPrior(taxon) + TaxonPolySuffStatLogProb(taxon);
+    }
 
     //! return log prob of the current substitution mapping, as a function of the
     //! current codon substitution process
@@ -896,17 +876,13 @@ class DatedBranchMutSelModel : public ChainComponent {
     // Node ages and branch rates
     //! \brief log prob to be recomputed when moving age of focal node
     double LocalNodeAgeLogProb(Tree::NodeIndex node) const {
-        return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+        return LocalBranchMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
     }
 
     //! \brief log prob to be recomputed when moving branch rates (brownian process) around of focal
     //! node
-    double LocalNodeRatesLogProb(Tree::NodeIndex node) const {
-        double tot = LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
-        if (tree->is_leaf(node) and polyprocess != nullptr) {
-            tot += TaxonPolySuffStatLogProb(taxonset->GetTaxonIndex(tree->node_name(node)));
-        }
-        return tot;
+    double BranchRatesLogProb(Tree::BranchIndex branch) const {
+        return BranchMultivariateLogPrior(branch) + BranchLengthSuffStatLogProb(branch);
     }
 
     //! \brief log prob factor (without prior) to be recomputed when moving age of focal node, or
@@ -931,51 +907,17 @@ class DatedBranchMutSelModel : public ChainComponent {
             branchlength->GetVal(branch));
     }
 
-    //! \brief return log prob of current substitution mapping, as a function of
-    //! the lengths of the tree
-    double BranchLengthSuffStatLogProb() const {
-        return branchlengthpathsuffstatarray->GetLogProb(*branchlength);
-    }
-
-    //! \brief return log prob of current substitution mapping, as a function of
-    //! the length of a given branch
-    double BranchLengthLogProb() const {
-        return GetLogPrior() + BranchLengthSuffStatLogProb() + PolySuffStatLogProb();
-    }
-
     // PopSize
     //! \brief log prob to be recomputed when moving omega (brownian process) around of focal node
-    double LocalNodePopSizeLogProb(Tree::NodeIndex node) const {
-        return LocalNodeMultivariateLogPrior(node) + LocalNodePopSizeSuffStatLogProb(node);
+    double BranchPopSizeLogProb(Tree::BranchIndex branch) const {
+        return BranchMultivariateLogPrior(branch) + BranchSuffStatLogProb(branch);
     }
-
-    //! \brief log prob factor (without prior) to be recomputed when moving omega (brownian process)
-    //! around of focal node
-    double LocalNodePopSizeSuffStatLogProb(Tree::NodeIndex node) const {
-        double tot = 0;
-        // for all children
-        for (auto const &child : tree->children(node)) {
-            tot += NodePopSizeSuffStatLogProb(tree->branch_index(child));
-        }
-        if (!tree->is_root(node)) {
-            // for the branch attached to the node
-            tot += NodePopSizeSuffStatLogProb(tree->branch_index(node));
-        }
-        if (tree->is_leaf(node) and polyprocess != nullptr) {
-            tot += TaxonPolySuffStatLogProb(taxonset->GetTaxonIndex(tree->node_name(node)));
-        }
-        return tot;
-    }
-
     //! \brief return log prob of current substitution mapping (on focal branch), as a function of
     //! omega of a given branch
-    double NodePopSizeSuffStatLogProb(Tree::BranchIndex branch) const {
+    double BranchSuffStatLogProb(Tree::BranchIndex branch) const {
         return branchcomponentpathsuffstatbidimarray->GetRowLogProb(
             branch, *branchcomponentcodonmatrixarray);
     }
-
-    //! log prob factor to be recomputed when Theta=4*Ne*u
-    double ThetaLogProb() const { return ThetaLogPrior() + PolySuffStatLogProb(); }
 
     //! log prob factor to be recomputed when moving nucleotide mutation rate
     //! parameters (nucrelrate and nucstat)
@@ -1050,19 +992,18 @@ class DatedBranchMutSelModel : public ChainComponent {
             MoveNodeAges(0.1, 3);
 
             if (!clamp_rates) {
-                MoveNodeRates(0.5, 3);
-                MoveNodeRates(0.05, 3);
+                MoveBranchRate(0.5, 3);
+                MoveBranchRate(0.05, 3);
             } else {
-                MoveAllNodeRates(0.5, 3);
-                MoveAllNodeRates(0.05, 3);
+                std::cerr << "Clamping mutation rates is not yet implemented" << std::endl;
             }
 
             CollectSitePathSuffStat();
             CollectComponentPathSuffStat();
             if (!clamp_nuc_matrix) { MoveNucRates(); }
             if (!clamp_pop_sizes) {
-                MoveNodePopSize(0.5, 3);
-                MoveNodePopSize(0.05, 3);
+                MoveBranchPopSize(0.5, 3);
+                MoveBranchPopSize(0.05, 3);
             }
 
             if (!clamp_corr_matrix) {
@@ -1096,8 +1037,6 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     //! MH moves on branch ages for a focal node
     void MoveNodeAge(Tree::NodeIndex node, double tuning) {
-        double debug_logratio = 0;
-        if (debug) { debug_logratio = -BranchLengthLogProb(); }
         double logratio = -LocalNodeAgeLogProb(node);
 
         double bk = nodeages->GetVal(node);
@@ -1108,23 +1047,6 @@ class DatedBranchMutSelModel : public ChainComponent {
         double logprob = LocalNodeAgeLogProb(node);
         logratio += logprob;
 
-        if (debug) {
-            UpdateModel();
-            double update_logprob = LocalNodeAgeLogProb(node);
-            if (abs(update_logprob - logprob) > 1e-4) {
-                std::cerr << "UpdateLocalChronogram was wrong." << std::endl;
-            }
-            CollectSuffStat();
-            update_logprob = LocalNodeAgeLogProb(node);
-            if (abs(update_logprob - logprob) > 1e-4) {
-                std::cerr << "SuffStats were not collected for MoveNodeAge." << std::endl;
-            }
-            debug_logratio += BranchLengthLogProb();
-            if (abs(debug_logratio - logratio) > 1e-4) {
-                std::cerr << "LocalNodeAgeLogProb was wrong." << std::endl;
-            }
-        }
-
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
             (*nodeages)[node] = bk;
@@ -1133,115 +1055,71 @@ class DatedBranchMutSelModel : public ChainComponent {
     }
 
     //! MH moves on branch rates (brownian process)
-    void MoveNodeRates(double tuning, int nrep) {
+    void MoveBranchRate(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
-            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
-                MoveNodeProcessRate(node, tuning);
-            }
-        }
-    }
-
-    void MoveAllNodeRates(double tuning, int nrep) {
-        for (int rep = 0; rep < nrep; rep++) {
-            double logratio = -BranchLengthLogProb();
-
-            double m = tuning * (Random::Uniform() - 0.5);
-            noderates->SlidingMove(m);
-            branchrates->Update();
-            branchlength->Update();
-
-            double logprob = BranchLengthLogProb();
-            logratio += logprob;
-
-            bool accept = (log(Random::Uniform()) < logratio);
-            if (!accept) {
-                noderates->SlidingMove(-m);
-                branchrates->Update();
-                branchlength->Update();
+            MoveRootRate(tuning);
+            for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
+                MoveBranchRate(branch, tuning);
             }
         }
     }
 
     //! MH moves on branch rates (brownian process) for a focal node
-    void MoveNodeProcessRate(Tree::NodeIndex node, double tuning) {
-        double debug_logratio = 0;
-        if (debug) { debug_logratio = -BranchLengthLogProb(); }
-        double logratio = -LocalNodeRatesLogProb(node);
+    void MoveRootRate(double tuning) {
+        double logratio = -RootMultivariateLogPrior();
 
         double m = tuning * (Random::Uniform() - 0.5);
-        noderates->SlidingMove(node, m);
-        UpdateLocalBranchRates(node);
+        branchrates->SlidingRootMove(m);
 
-        double logprob = LocalNodeRatesLogProb(node);
+        double logprob = RootMultivariateLogPrior();
         logratio += logprob;
-        if (debug) {
-            UpdateModel();
-            double update_logprob = LocalNodeRatesLogProb(node);
-            if (abs(update_logprob - logprob) > 1e-4) {
-                std::cerr << "UpdateLocalBranchRates was wrong." << std::endl;
-            }
-            CollectSuffStat();
-            update_logprob = LocalNodeRatesLogProb(node);
-            if (abs(update_logprob - logprob) > 1e-4) {
-                std::cerr << "SuffStats were not collected for MoveNodeProcessRate." << std::endl;
-            }
-            debug_logratio += BranchLengthLogProb();
-            if (abs(debug_logratio - logratio) > 1e-4) {
-                std::cerr << "LocalNodeRatesLogProb was wrong." << std::endl;
-            }
-        }
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) { branchrates->SlidingRootMove(-m); }
+    }
+
+    //! MH moves on branch rates (brownian process) for a focal node
+    void MoveBranchRate(Tree::BranchIndex branch, double tuning) {
+        double logratio = -BranchRatesLogProb(branch);
+
+        double m = tuning * (Random::Uniform() - 0.5);
+        branchrates->SlidingMove(branch, m);
+        UpdateBranchRates(branch);
+
+        double logprob = BranchRatesLogProb(branch);
+        logratio += logprob;
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
-            noderates->SlidingMove(node, -m);
-            UpdateLocalBranchRates(node);
+            branchrates->SlidingMove(branch, -m);
+            UpdateBranchRates(branch);
         }
     }
 
     //! MH moves on branch omega (brownian process)
-    void MoveNodePopSize(double tuning, int nrep) {
+    void MoveBranchPopSize(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
-            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
-                if (!tree->is_root(node)) { MoveNodePopSize(node, tuning); }
+            for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
+                MoveBranchPopSize(branch, tuning);
             }
         }
     }
 
     //! MH moves on branch omega (brownian process) for a focal node
-    void MoveNodePopSize(Tree::NodeIndex node, double tuning) {
-        double debug_logratio = 0;
-        if (debug) { debug_logratio = -PathLogProb(); }
-
-        double logratio = -LocalNodePopSizeLogProb(node);
+    void MoveBranchPopSize(Tree::BranchIndex branch, double tuning) {
+        double logratio = -BranchPopSizeLogProb(branch);
 
         double m = tuning * (Random::Uniform() - 0.5);
-        nodepopsize->SlidingMove(node, m);
-        UpdateLocalBranchPopSize(node);
+        branchpopsize->SlidingMove(branch, m);
+        UpdateBranchPopSize(branch);
 
-        double logprob = LocalNodePopSizeLogProb(node);
+        double logprob = BranchPopSizeLogProb(branch);
         logratio += logprob;
-
-        if (debug) {
-            UpdateModel();
-            double update_logprob = LocalNodePopSizeLogProb(node);
-            if (abs(update_logprob - logprob) > 1e-4) {
-                std::cerr << "UpdateLocalBranchPopSize was wrong." << std::endl;
-            }
-            CollectSuffStat();
-            update_logprob = LocalNodePopSizeLogProb(node);
-            if (abs(update_logprob - logprob) > 1e-4) {
-                std::cerr << "SuffStats were not collected for MoveNodePopSize." << std::endl;
-            }
-            debug_logratio += PathLogProb();
-            if (abs(debug_logratio - logratio) > 1e-4) {
-                std::cerr << "LocalNodePopSizeLogProb was wrong." << std::endl;
-            }
-        }
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
-            nodepopsize->SlidingMove(node, -m);
-            UpdateLocalBranchPopSize(node);
+            branchpopsize->SlidingMove(branch, -m);
+            UpdateBranchPopSize(branch);
         }
     }
 
@@ -1251,17 +1129,44 @@ class DatedBranchMutSelModel : public ChainComponent {
         MoveBaseMixture(nrep);
     }
 
+    //! MH move on theta
+    void MoveLeafTheta(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) {
+            for (int taxon = 0; taxon < Ntaxa; taxon++) {
+                for (int dim = 0; dim < dimension; dim++) { MoveLeafTheta(tuning, taxon, dim); }
+            }
+        }
+    }
+
+    void MoveLeafTheta(double tuning, int taxon, int dim) {
+        double logratio = -ThetaLogProb(taxon);
+
+        double m = tuning * (Random::Uniform() - 0.5);
+        theta->SlidingTaxonMove(taxon, dim, m);
+
+        double logprob = ThetaLogProb(taxon);
+        logratio += logprob;
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) { theta->SlidingTaxonMove(taxon, dim, -m); }
+    }
 
     //! MH move on theta
     void MoveTheta() {
-        Move::Scaling(theta_scale, 1.0, 10, &DatedBranchMutSelModel::ThetaLogProb,
+        Move::Scaling(theta_scale, 1.0, 5, &DatedBranchMutSelModel::ThetaScaleLogProb,
             &DatedBranchMutSelModel::NoUpdate, this);
-        Move::Scaling(theta_scale, 0.3, 10, &DatedBranchMutSelModel::ThetaLogProb,
+        MoveLeafTheta(1.0, 5);
+        Move::Scaling(theta_scale, 1.0, 5, &DatedBranchMutSelModel::ThetaScaleLogProb,
             &DatedBranchMutSelModel::NoUpdate, this);
+        Move::Scaling(theta_scale, 0.3, 5, &DatedBranchMutSelModel::ThetaScaleLogProb,
+            &DatedBranchMutSelModel::NoUpdate, this);
+        MoveLeafTheta(0.3, 5);
     }
 
     //! MH move on nucleotide rate parameters
     void MoveNucRates() {
+        // TO FIX ! When we change the nucrelrate, does the matrix is still normalized !!!
+        // Otherwise there is a lot to change here
         Move::Profile(nucrelrate, 0.1, 1, 3, &DatedBranchMutSelModel::NucRatesLogProb,
             &DatedBranchMutSelModel::UpdateMatrices, this);
         Move::Profile(nucrelrate, 0.03, 3, 3, &DatedBranchMutSelModel::NucRatesLogProb,

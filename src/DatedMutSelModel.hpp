@@ -232,7 +232,7 @@ class DatedMutSelModel : public ChainComponent {
 
     // global theta (4*Ne*u) used for polymorphism
     double theta_scale;
-    CompoundScaledMutationRate *theta;
+    NodeProcessScaledMutationRate *theta;
 
     PolyProcess *polyprocess{nullptr};
     PoissonRandomField *poissonrandomfield{nullptr};
@@ -414,7 +414,7 @@ class DatedMutSelModel : public ChainComponent {
 
         // codon matrices per branch and per site
         branchcomponentcodonmatrixarray = new MutSelNeCodonMatrixBidimArray(
-            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, &branchpopsize->GetArray());
+            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, branchpopsize->GetArray());
 
         // sub matrices per branch and per site
         branchsitecodonmatrixarray = new BranchComponentMatrixSelector<SubMatrix>(
@@ -430,7 +430,7 @@ class DatedMutSelModel : public ChainComponent {
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
         theta_scale = 1e-5;
         theta =
-            new CompoundScaledMutationRate(Ntaxa, theta_scale, noderates, nodepopsize, *taxonset);
+            new NodeProcessScaledMutationRate(Ntaxa, theta_scale, noderates, nodepopsize, *taxonset);
         if (polydata != nullptr) {
             poissonrandomfield =
                 new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
