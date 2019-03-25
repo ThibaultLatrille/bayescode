@@ -170,14 +170,17 @@ class BranchWiseMultivariateProcess : public SimpleBranchArray<EVector> {
     //! dimension
     int GetDimensions() const { return dimensions; };
 
-    //! variance of the pro recursively a node from prior
-    double GetSigma(int dimension) const {
-        return sqrt(1.0 / precision_matrix(dimension, dimension));
-    };
+    double GetBranchLogProb(Tree::BranchIndex branch) const {
+        return Random::logNormalDensity(GetContrast(branch), precision_matrix);
+    }
 
     //! get log prob for a given node
-    double GetLogProb(Tree::BranchIndex branch) const {
-        return Random::logNormalDensity(GetContrast(branch), precision_matrix);
+    double GetLocalBranchLogProb(Tree::BranchIndex branch) const {
+        double tot = GetBranchLogProb(branch);
+        for (Tree::NodeIndex const &child : GetTree().children(GetTree().node_index(branch))) {
+            tot += GetBranchLogProb(GetTree().branch_index(child));
+        }
+        return tot;
     }
 
     //! get contrast
@@ -196,10 +199,11 @@ class BranchWiseMultivariateProcess : public SimpleBranchArray<EVector> {
     }
 
     //! get local log prob for a given node
-    double GetLocalLogProb(Tree::NodeIndex node) const {
-        double tot = GetLogProb(GetTree().branch_index(node));
+    double GetLocalNodeLogProb(Tree::NodeIndex node) const {
+        double tot = 0;
+        if (!GetTree().is_root(node)) { tot += GetBranchLogProb(GetTree().branch_index(node)); }
         for (Tree::NodeIndex const &child : GetTree().children(node)) {
-            tot += GetLogProb(GetTree().branch_index(child));
+            tot += GetBranchLogProb(GetTree().branch_index(child));
         }
         return tot;
     }
@@ -208,7 +212,7 @@ class BranchWiseMultivariateProcess : public SimpleBranchArray<EVector> {
     double GetLogProb() const {
         double tot = 0;
         for (Tree::BranchIndex branch = 0; branch < GetTree().nb_branches(); branch++) {
-            tot += GetLogProb(branch);
+            tot += GetBranchLogProb(branch);
         }
         return tot;
     }
@@ -272,28 +276,31 @@ class BranchWiseProcess : public SimpleBranchArray<double> {
     BranchWiseProcess(BranchWiseMultivariateProcess &inbranchwise_multivariate, int indimension)
         : SimpleBranchArray<double>(inbranchwise_multivariate.GetTree()),
           dimension(indimension),
-          branchwise_multivariate(inbranchwise_multivariate) {}
-
-    //! variance of the pro recursively a node from prior
-    double GetSigma() const { return branchwise_multivariate.GetSigma(dimension); };
+          branchwise_multivariate(inbranchwise_multivariate) {
+        Update();
+    }
 
     void SlidingMove(Tree::BranchIndex branch, double m) {
         branchwise_multivariate[branch](dimension) += m;
         this->array[branch] = exp(branchwise_multivariate[branch](dimension));
     }
 
-    double GetRootVal() { return exp(branchwise_multivariate.root_process(dimension)); }
+    double GetRootVal() const { return root_value; }
 
-    void SlidingRootMove(double m) { branchwise_multivariate.root_process(dimension) += m; }
+    void SlidingRootMove(double m) {
+        branchwise_multivariate.root_process(dimension) += m;
+        root_value = exp(branchwise_multivariate.root_process(dimension));
+    }
 
     void Update() {
-        std::vector<double> array(GetTree().nb_branches(), 0.0);
+        root_value = exp(branchwise_multivariate.root_process(dimension));
         for (Tree::BranchIndex branch = 0; branch < GetTree().nb_branches(); branch++) {
             this->array[branch] = exp(branchwise_multivariate[branch](dimension));
         }
     }
 
   protected:
+    double root_value;
     int dimension;
     BranchWiseMultivariateProcess &branchwise_multivariate;
 };

@@ -507,6 +507,8 @@ class DatedBranchMutSelModel : public ChainComponent {
             model_stat(info, "*BranchTime_" + b_name, (*chronogram)[branch]);
             model_stat(info, "*BranchLength_" + b_name, (*branchlength)[branch]);
         }
+        model_stat(info, "RootPopSize", [this]() { return branchpopsize->GetRootVal(); });
+        model_stat(info, "RootRate", [this]() { return branchrates->GetRootVal(); });
         model_stat(info, "MeanAAEntropy", [this]() { return GetMeanAAEntropy(); });
         model_stat(info, "MeanComponentAAConcentration",
             [this]() { return GetMeanComponentAAConcentration(); });
@@ -664,18 +666,18 @@ class DatedBranchMutSelModel : public ChainComponent {
     double BranchMultivariateLogPrior() const { return branchwise_multivariate->GetLogProb(); }
 
     //! log prior over branch rates (brownian process)
-    double BranchMultivariateLogPrior(Tree::BranchIndex branch) const {
-        return branchwise_multivariate->GetLogProb(branch);
+    double LocalBranchMultivariateLogPrior(Tree::BranchIndex branch) const {
+        return branchwise_multivariate->GetLocalBranchLogProb(branch);
     }
 
     //! log prior of branch rate (brownian process) around of focal node
-    double LocalBranchMultivariateLogPrior(Tree::NodeIndex node) const {
-        return branchwise_multivariate->GetLocalLogProb(node);
+    double LocalNodeMultivariateLogPrior(Tree::NodeIndex node) const {
+        return branchwise_multivariate->GetLocalNodeLogProb(node);
     }
 
     //! log prior of
     double RootMultivariateLogPrior() const {
-        return branchwise_multivariate->GetLogProb(tree->root());
+        return branchwise_multivariate->GetLocalNodeLogProb(tree->root());
     }
 
     double ThetaScaleLogPrior() const { return 0.0; }
@@ -855,13 +857,16 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! return log prob of the substitution mappings over sites allocated to
     //! component k of the mixture
     double ComponentPathSuffStatLogProb(int k) const {
-        double loglk = 0.0;
-        for (int branch{0}; branch < Nbranch; branch++) {
-            loglk += branchcomponentpathsuffstatbidimarray->GetVal(branch, k).GetLogProb(
-                branchcomponentcodonmatrixarray->GetVal(branch, k));
-        }
-        loglk += ComponentPolySuffStatLogProb(k);
-        return loglk;
+        return branchcomponentpathsuffstatbidimarray->GetColLogProb(
+                   k, *branchcomponentcodonmatrixarray) +
+               ComponentPolySuffStatLogProb(k);
+    }
+
+    //! \brief return log prob of current substitution mapping (on focal branch), as a function of
+    //! omega of a given branch
+    double BranchPathSuffStatLogProb(Tree::BranchIndex branch) const {
+        return branchcomponentpathsuffstatbidimarray->GetRowLogProb(
+            branch, *branchcomponentcodonmatrixarray);
     }
 
     //! return log prob of first-level mixture components (i.e. all amino-acid
@@ -876,13 +881,13 @@ class DatedBranchMutSelModel : public ChainComponent {
     // Node ages and branch rates
     //! \brief log prob to be recomputed when moving age of focal node
     double LocalNodeAgeLogProb(Tree::NodeIndex node) const {
-        return LocalBranchMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+        return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
     }
 
     //! \brief log prob to be recomputed when moving branch rates (brownian process) around of focal
     //! node
     double BranchRatesLogProb(Tree::BranchIndex branch) const {
-        return BranchMultivariateLogPrior(branch) + BranchLengthSuffStatLogProb(branch);
+        return LocalBranchMultivariateLogPrior(branch) + BranchLengthSuffStatLogProb(branch);
     }
 
     //! \brief log prob factor (without prior) to be recomputed when moving age of focal node, or
@@ -910,13 +915,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     // PopSize
     //! \brief log prob to be recomputed when moving omega (brownian process) around of focal node
     double BranchPopSizeLogProb(Tree::BranchIndex branch) const {
-        return BranchMultivariateLogPrior(branch) + BranchSuffStatLogProb(branch);
-    }
-    //! \brief return log prob of current substitution mapping (on focal branch), as a function of
-    //! omega of a given branch
-    double BranchSuffStatLogProb(Tree::BranchIndex branch) const {
-        return branchcomponentpathsuffstatbidimarray->GetRowLogProb(
-            branch, *branchcomponentcodonmatrixarray);
+        return LocalBranchMultivariateLogPrior(branch) + BranchPathSuffStatLogProb(branch);
     }
 
     //! log prob factor to be recomputed when moving nucleotide mutation rate
@@ -1044,8 +1043,7 @@ class DatedBranchMutSelModel : public ChainComponent {
         nodeages->SlidingMove(node, sliding);
         UpdateLocalChronogram(node);
 
-        double logprob = LocalNodeAgeLogProb(node);
-        logratio += logprob;
+        logratio += LocalNodeAgeLogProb(node);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
@@ -1086,8 +1084,7 @@ class DatedBranchMutSelModel : public ChainComponent {
         branchrates->SlidingMove(branch, m);
         UpdateBranchRates(branch);
 
-        double logprob = BranchRatesLogProb(branch);
-        logratio += logprob;
+        logratio += BranchRatesLogProb(branch);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
@@ -1113,8 +1110,7 @@ class DatedBranchMutSelModel : public ChainComponent {
         branchpopsize->SlidingMove(branch, m);
         UpdateBranchPopSize(branch);
 
-        double logprob = BranchPopSizeLogProb(branch);
-        logratio += logprob;
+        logratio += BranchPopSizeLogProb(branch);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
@@ -1144,8 +1140,7 @@ class DatedBranchMutSelModel : public ChainComponent {
         double m = tuning * (Random::Uniform() - 0.5);
         theta->SlidingTaxonMove(taxon, dim, m);
 
-        double logprob = ThetaLogProb(taxon);
-        logratio += logprob;
+        logratio += ThetaLogProb(taxon);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) { theta->SlidingTaxonMove(taxon, dim, -m); }
@@ -1173,7 +1168,6 @@ class DatedBranchMutSelModel : public ChainComponent {
             &DatedBranchMutSelModel::UpdateMatrices, this);
         Move::Profile(nucrelrate, 0.01, 3, 3, &DatedBranchMutSelModel::NucRatesLogProb,
             &DatedBranchMutSelModel::UpdateMatrices, this);
-
         Move::Profile(nucstat, 0.1, 1, 3, &DatedBranchMutSelModel::NucRatesLogProb,
             &DatedBranchMutSelModel::UpdateMatrices, this);
         Move::Profile(nucstat, 0.01, 1, 3, &DatedBranchMutSelModel::NucRatesLogProb,

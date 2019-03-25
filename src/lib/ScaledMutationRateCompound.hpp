@@ -29,14 +29,10 @@ class NodeProcessScaledMutationRate : public ScaledMutationRate {
         return theta_scale * node_rates->GetExpVal(node) * node_popsize->GetExpVal(node);
     }
 
-    double &operator[](int taxon) {
-        return theta[taxon];
-    }
+    double &operator[](int taxon) { return theta[taxon]; }
 
     void Update() {
-        for (size_t taxon = 0; taxon < theta.size(); taxon++){
-            theta[taxon] = GetTheta(taxon);
-        }
+        for (size_t taxon = 0; taxon < theta.size(); taxon++) { theta[taxon] = GetTheta(taxon); }
     }
 
   private:
@@ -49,40 +45,37 @@ class NodeProcessScaledMutationRate : public ScaledMutationRate {
 };
 
 class BranchWiseProcessScaledMutationRate : public ScaledMutationRate {
-public:
+  public:
     //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
     //! rate (a NodeProcess) and the population size (a NodeProcess).
     BranchWiseProcessScaledMutationRate(int Ntaxa, double const &intheta_scale,
-                                        LeafMultivariateProcess &inleaf_multivariate_process, TaxonSet const &taxon)
-            : theta_scale{intheta_scale}, leaf_multivariate_process{inleaf_multivariate_process} {
+        LeafMultivariateProcess &inleaf_multivariate_process, TaxonSet const &taxon)
+        : theta_scale{intheta_scale}, leaf_multivariate_process{inleaf_multivariate_process} {
         reverse_index_table = taxon.get_reverse_index_table(&leaf_multivariate_process.GetTree());
         theta.resize(taxon.GetNtaxa());
     };
 
     ~BranchWiseProcessScaledMutationRate() override = default;
 
-    double GetTheta(int taxon) const override {
-        return theta[taxon];
-    }
+    double GetTheta(int taxon) const override { return theta[taxon]; }
 
-    double &operator[](int taxon) {
-        return theta[taxon];
-    }
+    double &operator[](int taxon) { return theta[taxon]; }
 
     void SlidingTaxonMove(int taxon, int dimension, double m) {
         Tree::NodeIndex node = reverse_index_table[taxon];
-        assert(GetTree().is_leaf(node));
+        assert(leaf_multivariate_process.GetTree().is_leaf(node));
         leaf_multivariate_process[node](dimension) += m;
-        theta[taxon] =  theta_scale * leaf_multivariate_process.GetTheta(node);
+        theta[taxon] = theta_scale * leaf_multivariate_process.GetTheta(node);
     }
 
     void Update() {
-        for (size_t taxon = 0; taxon < theta.size(); taxon++){
-            theta[taxon] = theta_scale * leaf_multivariate_process.GetTheta(reverse_index_table[taxon]);
+        for (size_t taxon = 0; taxon < theta.size(); taxon++) {
+            theta[taxon] =
+                theta_scale * leaf_multivariate_process.GetTheta(reverse_index_table[taxon]);
         }
     }
 
-private:
+  private:
     double const &theta_scale;
     LeafMultivariateProcess &leaf_multivariate_process;
     std::vector<double> theta;
