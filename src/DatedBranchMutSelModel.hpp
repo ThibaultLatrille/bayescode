@@ -457,6 +457,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     void declare_interface(Info info) {
         model_node(info, "nodeages", *nodeages);
         model_node(info, "branchwise_multivariate", *branchwise_multivariate);
+        model_node(info, "root_multivariate", branchwise_multivariate->root_process);
         model_node(info, "precision_matrix", precision_matrix);
         model_node(info, "invert_whishart_kappa", invert_whishart_kappa);
         model_node(info, "invert_whishart_df", invert_whishart_df);
@@ -471,7 +472,10 @@ class DatedBranchMutSelModel : public ChainComponent {
         model_node(info, "weight", *weight);
         model_node(info, "componentaafitnessarray", *componentaafitnessarray);
         model_node(info, "sitealloc", *sitealloc);
-        if (polyprocess != nullptr) { model_node(info, "theta_scale", theta_scale); }
+        if (polyprocess != nullptr) {
+            model_node(info, "theta_scale", theta_scale);
+            model_node(info, "leaf_multivariate", *leaf_multivariate);
+        }
 
         model_stat(info, "lnPrior", [this]() { return GetLogPrior(); });
         model_stat(info, "lnLikelihood", [this]() { return GetLogLikelihood(); });
@@ -578,9 +582,9 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! Used when the model is restarted or for the posterior predictif.
     void UpdateBranches() {
         chronogram->Update();
-        branchpopsize->Update();
         branchrates->Update();
         branchlength->Update();
+        branchpopsize->Update();
     }
 
     //! \brief Update the chronogram (branch time) and branch lengths around the focal node.
@@ -633,7 +637,6 @@ class DatedBranchMutSelModel : public ChainComponent {
     double GetLogPrior() const {
         double total = 0;
         total += BranchMultivariateLogPrior();
-        total += RootMultivariateLogPrior();
 
         if (!clamp_nuc_matrix) { total += NucRatesLogPrior(); }
 

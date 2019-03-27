@@ -98,11 +98,11 @@ run-app-tests: all
 	@echo "\n\e[35m\e[1m== Dated Branch Omega restart ===============================================\e[0m"
 	_build/dated _test/dated_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel run =========================================================\e[0m"
-	_build/datedmutsel --ncat 10 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/datedmutsel_gal4
+	_build/branchmutsel --ncat 10 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/branchmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel restart =====================================================\e[0m"
-	_build/datedmutsel _test/datedmutsel_gal4
+	_build/branchmutsel _test/branchmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel read ========================================================\e[0m"
-	_build/readdatedmutsel --ss _test/datedmutsel_gal4
+	_build/readbranchmutsel --ss _test/branchmutsel_gal4
 
 # @make --no-print-directory run-multigeneglobom-test
 .PHONY: run-multigeneglobom-test
@@ -141,11 +141,11 @@ mutselomega: _build
 
 .PHONY: dated
 dated: _build
-	@cd _build ; make --no-print-directory -j8 dated datedmutsel
+	@cd _build ; make --no-print-directory -j8 dated branchmutsel
 	@rm -rf _dated
 	@mkdir _dated
-	_build/datedmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/mutsel_gal4
-	_build/datedmutsel _dated/mutsel_gal4
+	_build/branchmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/mutsel_gal4
+	_build/branchmutsel _dated/mutsel_gal4
 	_build/dated -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/omega_gal4
 	_build/dated _dated/omega_gal4
 
