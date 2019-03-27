@@ -371,7 +371,9 @@ class DatedBranchMutSelModel : public ChainComponent {
         baseconchypermean = Naa;
         baseconchyperinvshape = 1.0;
         baseconcentrationarray = new IIDGamma(baseNcat, baseconchypermean, baseconchyperinvshape);
-        for (int k = 0; k < baseNcat; k++) { (*baseconcentrationarray)[k] = 20.0; }
+        for (int basecat = 0; basecat < baseNcat; basecat++) {
+            (*baseconcentrationarray)[basecat] = 20.0;
+        }
 
         // suff stats for component aa fitness arrays
         basesuffstatarray = new DirichletSuffStatArray(baseNcat, Naa);
@@ -727,10 +729,10 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     //! log prior over base center and concentration parameters of component k of
     //! base distribution
-    double BaseLogPrior(int k) const {
+    double BaseLogPrior(int cat) const {
         double total = 0;
-        total += basecenterarray->GetLogProb(k);
-        total += baseconcentrationarray->GetLogProb(k);
+        total += basecenterarray->GetLogProb(cat);
+        total += baseconcentrationarray->GetLogProb(cat);
         return total;
     }
 
@@ -811,14 +813,14 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     //! return log prob only at the tips due to polymorphism of the substitution
     //! mapping, over sites allocated to component k of the mixture
-    double ComponentPolySuffStatLogProb(int k) const {
-        // sum over all sites allocated to component k
+    double ComponentPolySuffStatLogProb(int cat) const {
+        // sum over all sites allocated to component cat
         if (polyprocess != nullptr) {
             double tot = 0;
             for (int taxon = 0; taxon < Ntaxa; taxon++) {
-                tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
-                    *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix,
-                    theta->GetTheta(taxon));
+                tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, cat)
+                           .GetLogProb(*poissonrandomfield, componentaafitnessarray->GetVal(cat),
+                               *nucmatrix, theta->GetTheta(taxon));
             }
             return tot;
         } else {
@@ -829,13 +831,14 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! return log prob only at the tips due to polymorphism of the substitution
     //! mapping, over sites allocated to component k of the mixture
     double TaxonPolySuffStatLogProb(int taxon) const {
-        // sum over all sites allocated to component k
+        // sum over all sites allocated to taxon
         if (polyprocess != nullptr) {
             double tot = 0;
             double d_theta = theta->GetTheta(taxon);
-            for (int k = 0; k < Ncat; k++) {
-                tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
-                    *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix, d_theta);
+            for (int cat = 0; cat < Ncat; cat++) {
+                tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, cat)
+                           .GetLogProb(*poissonrandomfield, componentaafitnessarray->GetVal(cat),
+                               *nucmatrix, d_theta);
             }
             return tot;
         } else {
@@ -859,10 +862,10 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     //! return log prob of the substitution mappings over sites allocated to
     //! component k of the mixture
-    double ComponentPathSuffStatLogProb(int k) const {
+    double ComponentPathSuffStatLogProb(int cat) const {
         return branchcomponentpathsuffstatbidimarray->GetColLogProb(
-                   k, *branchcomponentcodonmatrixarray) +
-               ComponentPolySuffStatLogProb(k);
+                   cat, *branchcomponentcodonmatrixarray) +
+               ComponentPolySuffStatLogProb(cat);
     }
 
     //! \brief return log prob of current substitution mapping (on focal branch), as a function of
@@ -875,10 +878,10 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! return log prob of first-level mixture components (i.e. all amino-acid
     //! profiles drawn from component k of the base distribution), as a function
     //! of the center and concentration parameters of this component
-    double BaseSuffStatLogProb(int k) const {
-        return basesuffstatarray->GetVal(k).GetLogProb(
-                   basecenterarray->GetVal(k), 1.0 / baseconcentrationarray->GetVal(k)) +
-               ComponentPolySuffStatLogProb(k);
+    double BaseSuffStatLogProb(int cat) const {
+        return basesuffstatarray->GetVal(cat).GetLogProb(
+                   basecenterarray->GetVal(cat), 1.0 / baseconcentrationarray->GetVal(cat)) +
+               ComponentPolySuffStatLogProb(cat);
     }
 
     // Node ages and branch rates
@@ -1163,8 +1166,6 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     //! MH move on nucleotide rate parameters
     void MoveNucRates() {
-        // TO FIX ! When we change the nucrelrate, does the matrix is still normalized !!!
-        // Otherwise there is a lot to change here
         Move::Profile(nucrelrate, 0.1, 1, 3, &DatedBranchMutSelModel::NucRatesLogProb,
             &DatedBranchMutSelModel::UpdateMatrices, this);
         Move::Profile(nucrelrate, 0.03, 3, 3, &DatedBranchMutSelModel::NucRatesLogProb,
@@ -1223,22 +1224,22 @@ class DatedBranchMutSelModel : public ChainComponent {
         double nacc = 0;
         double ntot = 0;
         double bk[Naa];
-        for (int i = 0; i < Ncat; i++) {
-            if (occupancy->GetVal(i)) {
-                std::vector<double> &aa = (*componentaafitnessarray)[i];
+        for (int cat = 0; cat < Ncat; cat++) {
+            if (occupancy->GetVal(cat)) {
+                std::vector<double> &aa = (*componentaafitnessarray)[cat];
                 for (int rep = 0; rep < nrep; rep++) {
                     for (int l = 0; l < Naa; l++) { bk[l] = aa[l]; }
-                    double deltalogprob = -AALogPrior(i) - ComponentPathSuffStatLogProb(i);
+                    double deltalogprob = -AALogPrior(cat) - ComponentPathSuffStatLogProb(cat);
                     double loghastings = Random::ProfileProposeMove(aa, Naa, tuning, n);
                     deltalogprob += loghastings;
-                    UpdateCodonMatrix(i);
-                    deltalogprob += AALogPrior(i) + ComponentPathSuffStatLogProb(i);
+                    UpdateCodonMatrix(cat);
+                    deltalogprob += AALogPrior(cat) + ComponentPathSuffStatLogProb(cat);
                     int accepted = (log(Random::Uniform()) < deltalogprob);
                     if (accepted) {
                         nacc++;
                     } else {
                         for (int l = 0; l < Naa; l++) { aa[l] = bk[l]; }
-                        UpdateCodonMatrix(i);
+                        UpdateCodonMatrix(cat);
                     }
                     ntot++;
                 }
@@ -1263,12 +1264,12 @@ class DatedBranchMutSelModel : public ChainComponent {
     double MoveAAGamma(double tuning, int nrep) {
         double nacc = 0;
         double ntot = 0;
-        for (int i = 0; i < Ncat; i++) {
-            if (occupancy->GetVal(i)) {
-                double aaconc = componentconcentrationarray->GetVal(i);
-                const std::vector<double> &aacenter = componentcenterarray->GetVal(i);
+        for (int cat = 0; cat < Ncat; cat++) {
+            if (occupancy->GetVal(cat)) {
+                double aaconc = componentconcentrationarray->GetVal(cat);
+                const std::vector<double> &aacenter = componentcenterarray->GetVal(cat);
 
-                std::vector<double> &aa = (*componentaafitnessarray)[i];
+                std::vector<double> &aa = (*componentaafitnessarray)[cat];
                 std::vector<double> x(Naa, 0);
                 double z = Random::sGamma(aaconc);
                 for (int l = 0; l < Naa; l++) { x[l] = z * aa[l]; }
@@ -1279,7 +1280,7 @@ class DatedBranchMutSelModel : public ChainComponent {
 
                 for (int rep = 0; rep < nrep; rep++) {
                     double deltalogprob =
-                        -GammaAALogPrior(x, aacenter, aaconc) - ComponentPathSuffStatLogProb(i);
+                        -GammaAALogPrior(x, aacenter, aaconc) - ComponentPathSuffStatLogProb(cat);
 
                     double loghastings = 0;
                     z = 0;
@@ -1297,10 +1298,10 @@ class DatedBranchMutSelModel : public ChainComponent {
 
                     deltalogprob += loghastings;
 
-                    UpdateCodonMatrix(i);
+                    UpdateCodonMatrix(cat);
 
                     deltalogprob +=
-                        GammaAALogPrior(x, aacenter, aaconc) + ComponentPathSuffStatLogProb(i);
+                        GammaAALogPrior(x, aacenter, aaconc) + ComponentPathSuffStatLogProb(cat);
 
                     int accepted = (log(Random::Uniform()) < deltalogprob);
                     if (accepted) {
@@ -1312,7 +1313,7 @@ class DatedBranchMutSelModel : public ChainComponent {
                         aa = bkaa;
                         x = bkx;
                         z = bkz;
-                        UpdateCodonMatrix(i);
+                        UpdateCodonMatrix(cat);
                     }
                     ntot++;
                 }
@@ -1324,9 +1325,9 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! Gibbs resample mixture allocations
     void ResampleAlloc() {
         std::vector<double> postprob(Ncat, 0);
-        for (int i = 0; i < Nsite; i++) {
-            GetAllocPostProb(i, postprob);
-            sitealloc->GibbsResample(i, postprob);
+        for (int site = 0; site < Nsite; site++) {
+            GetAllocPostProb(site, postprob);
+            sitealloc->GibbsResample(site, postprob);
         }
         UpdateOccupancies();
     }
@@ -1342,22 +1343,20 @@ class DatedBranchMutSelModel : public ChainComponent {
         double max = 0;
         const std::vector<double> &w = weight->GetArray();
 
-        // !!!!! Here the branch should not matter, so we use the root.
-        const PathSuffStat &suffstat = branchsitepathsuffstatbidimarray->GetVal(0, site);
-        for (int i = 0; i < Ncat; i++) {
-            // !!!!! Here the condition should not matter, so we use site 0.
-            double tmp = suffstat.GetLogProb(branchcomponentcodonmatrixarray->GetVal(0, 0));
-            postprob[i] = tmp;
-            if ((!i) || (max < tmp)) { max = tmp; }
+        for (int cat = 0; cat < Ncat; cat++) {
+            // !!!!! TO FIX : I'm not sure what I'm doing here (see GetAllocPostProb in MutSel).
+            double tmp = branchsitepathsuffstatbidimarray->GetColLogProb(
+                site, *branchcomponentcodonmatrixarray, cat);
+            postprob[cat] = tmp;
+            if ((!cat) || (max < tmp)) { max = tmp; }
         }
-
         double total = 0;
-        for (int i = 0; i < Ncat; i++) {
-            postprob[i] = w[i] * exp(postprob[i] - max);
-            total += postprob[i];
+        for (int cat = 0; cat < Ncat; cat++) {
+            postprob[cat] = w[cat] * exp(postprob[cat] - max);
+            total += postprob[cat];
         }
 
-        for (int i = 0; i < Ncat; i++) { postprob[i] /= total; }
+        for (int cat = 0; cat < Ncat; cat++) { postprob[cat] /= total; }
     }
 
     //! MCMC sequence for label switching moves
@@ -1411,14 +1410,14 @@ class DatedBranchMutSelModel : public ChainComponent {
         double nacc = 0;
         double ntot = 0;
         std::vector<double> bk(Naa, 0);
-        for (int k = 0; k < baseNcat; k++) {
-            if (baseoccupancy->GetVal(k)) {
-                std::vector<double> &aa = (*basecenterarray)[k];
+        for (int basecat = 0; basecat < baseNcat; basecat++) {
+            if (baseoccupancy->GetVal(basecat)) {
+                std::vector<double> &aa = (*basecenterarray)[basecat];
                 bk = aa;
-                double deltalogprob = -BaseLogProb(k);
+                double deltalogprob = -BaseLogProb(basecat);
                 double loghastings = Random::ProfileProposeMove(aa, Naa, tuning, n);
                 deltalogprob += loghastings;
-                deltalogprob += BaseLogProb(k);
+                deltalogprob += BaseLogProb(basecat);
                 int accepted = (log(Random::Uniform()) < deltalogprob);
                 if (accepted) {
                     nacc++;
@@ -1436,16 +1435,16 @@ class DatedBranchMutSelModel : public ChainComponent {
     double MoveBaseConcentrations(double tuning) {
         double nacc = 0;
         double ntot = 0;
-        for (int k = 0; k < baseNcat; k++) {
-            if (baseoccupancy->GetVal(k)) {
-                double &c = (*baseconcentrationarray)[k];
+        for (int basecat = 0; basecat < baseNcat; basecat++) {
+            if (baseoccupancy->GetVal(basecat)) {
+                double &c = (*baseconcentrationarray)[basecat];
                 double bk = c;
-                double deltalogprob = -BaseLogProb(k);
+                double deltalogprob = -BaseLogProb(basecat);
                 double m = tuning * (Random::Uniform() - 0.5);
                 double e = exp(m);
                 c *= e;
                 deltalogprob += m;
-                deltalogprob += BaseLogProb(k);
+                deltalogprob += BaseLogProb(basecat);
                 int accepted = (log(Random::Uniform()) < deltalogprob);
                 if (accepted) {
                     nacc++;
@@ -1467,10 +1466,10 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! Gibbs resample base mixture allocations
     void ResampleBaseAlloc() {
         std::vector<double> postprob(baseNcat, 0);
-        for (int i = 0; i < Ncat; i++) {
-            GetBaseAllocPostProb(i, postprob);
-            componentalloc->GibbsResample(i, postprob);
-            if ((componentalloc->GetVal(i) < 0) || (componentalloc->GetVal(i) >= baseNcat)) {
+        for (int cat = 0; cat < Ncat; cat++) {
+            GetBaseAllocPostProb(cat, postprob);
+            componentalloc->GibbsResample(cat, postprob);
+            if ((componentalloc->GetVal(cat) < 0) || (componentalloc->GetVal(cat) >= baseNcat)) {
                 std::cerr << "error in ResampleBaseAlloc: out of bound\n";
                 exit(1);
             }
@@ -1489,20 +1488,20 @@ class DatedBranchMutSelModel : public ChainComponent {
     void GetBaseAllocPostProb(int cat, std::vector<double> &postprob) {
         double max = 0;
         const std::vector<double> &w = baseweight->GetArray();
-        for (int i = 0; i < baseNcat; i++) {
+        for (int basecat = 0; basecat < baseNcat; basecat++) {
             double tmp = Random::logDirichletDensity(componentaafitnessarray->GetVal(cat),
-                basecenterarray->GetVal(i), baseconcentrationarray->GetVal(i));
-            postprob[i] = tmp;
-            if ((!i) || (max < tmp)) { max = tmp; }
+                basecenterarray->GetVal(basecat), baseconcentrationarray->GetVal(basecat));
+            postprob[basecat] = tmp;
+            if ((!basecat) || (max < tmp)) { max = tmp; }
         }
 
         double total = 0;
-        for (int i = 0; i < baseNcat; i++) {
-            postprob[i] = w[i] * exp(postprob[i] - max);
-            total += postprob[i];
+        for (int basecat = 0; basecat < baseNcat; basecat++) {
+            postprob[basecat] = w[basecat] * exp(postprob[basecat] - max);
+            total += postprob[basecat];
         }
 
-        for (int i = 0; i < baseNcat; i++) { postprob[i] /= total; }
+        for (int basecat = 0; basecat < baseNcat; basecat++) { postprob[basecat] /= total; }
     }
 
     //! MCMC sequence for label switching moves of the base mixture
@@ -1534,8 +1533,8 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! amino-acid fitness profiles)
     int GetNcluster() const {
         int n = 0;
-        for (int i = 0; i < Ncat; i++) {
-            if (occupancy->GetVal(i)) { n++; }
+        for (int cat = 0; cat < Ncat; cat++) {
+            if (occupancy->GetVal(cat)) { n++; }
         }
         return n;
     }
@@ -1543,8 +1542,8 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! return number of occupied components in base distribution
     int GetBaseNcluster() const {
         int n = 0;
-        for (int i = 0; i < baseNcat; i++) {
-            if (baseoccupancy->GetVal(i)) { n++; }
+        for (int basecat = 0; basecat < baseNcat; basecat++) {
+            if (baseoccupancy->GetVal(basecat)) { n++; }
         }
         return n;
     }
@@ -1556,9 +1555,9 @@ class DatedBranchMutSelModel : public ChainComponent {
     double GetMeanComponentAAConcentration() const {
         double tot = 0;
         double totw = 0;
-        for (int i = 0; i < baseNcat; i++) {
-            tot += baseoccupancy->GetVal(i) * baseconcentrationarray->GetVal(i);
-            totw += baseoccupancy->GetVal(i);
+        for (int basecat = 0; basecat < baseNcat; basecat++) {
+            tot += baseoccupancy->GetVal(basecat) * baseconcentrationarray->GetVal(basecat);
+            totw += baseoccupancy->GetVal(basecat);
         }
         return tot / totw;
     }
@@ -1566,21 +1565,22 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! return mean entropy of centers of base distribution
     double GetMeanComponentAAEntropy() const {
         double tot = 0;
-        for (int i = 0; i < baseNcat; i++) {
-            tot += baseoccupancy->GetVal(i) * Random::GetEntropy(basecenterarray->GetVal(i));
+        for (int basecat = 0; basecat < baseNcat; basecat++) {
+            tot += baseoccupancy->GetVal(basecat) *
+                   Random::GetEntropy(basecenterarray->GetVal(basecat));
         }
         return tot / Ncat;
     }
 
     double GetPredictedDNDS(Tree::BranchIndex branch) const {
         double dn{0.}, dn0{0.};
-        for (int k = 0; k < Ncat; k++) {
-            if (occupancy->GetVal(k)) {
+        for (int cat = 0; cat < Ncat; cat++) {
+            if (occupancy->GetVal(cat)) {
                 double cat_dn{0}, cat_dn0{0};
                 std::tie(cat_dn, cat_dn0) =
-                    branchcomponentcodonmatrixarray->GetVal(branch, k).GetFlowDNDS();
-                dn += occupancy->GetVal(k) * cat_dn;
-                dn0 += occupancy->GetVal(k) * cat_dn0;
+                    branchcomponentcodonmatrixarray->GetVal(branch, cat).GetFlowDNDS();
+                dn += occupancy->GetVal(cat) * cat_dn;
+                dn0 += occupancy->GetVal(cat) * cat_dn0;
             }
         }
         return dn / dn0;
@@ -1588,7 +1588,9 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     double GetPredictedDNDS() const { return branchdnds->GetMean(); }
 
-    const std::vector<double> &GetProfile(int i) const { return siteaafitnessarray->GetVal(i); }
+    const std::vector<double> &GetProfile(int site) const {
+        return siteaafitnessarray->GetVal(site);
+    }
 
     void ToStream(std::ostream &os) { os << *this; }
 };

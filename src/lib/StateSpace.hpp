@@ -1,5 +1,4 @@
-#ifndef STATESPACE_H
-#define STATESPACE_H
+#pragma once
 
 #include <string>
 #include "BiologicalSequences.hpp"  //FIXME only here because constant unknown
@@ -131,5 +130,3 @@ class GenericStateSpace : public SimpleStateSpace {
         delete[] AlphabetSet;
     }
 };
-
-#endif  // STATESPACE_H

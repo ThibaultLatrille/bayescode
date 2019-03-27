@@ -1,5 +1,4 @@
-#ifndef BIOLOGICALSEQUENCES_H
-#define BIOLOGICALSEQUENCES_H
+#pragma once
 
 #include <cstdlib>
 #include <iostream>
@@ -147,4 +146,3 @@ inline std::ostream &operator<<(std::ostream &os, GeneticCodeType type) {
     return os;
 }
 
-#endif  // BIOLOGICALSEQUENCES_H

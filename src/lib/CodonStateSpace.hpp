@@ -1,5 +1,4 @@
-#ifndef CODONSTATESPACE_H
-#define CODONSTATESPACE_H
+#pragma once
 
 #include <map>
 #include "Random.hpp"
@@ -147,5 +146,3 @@ class CodonStateSpace : public StateSpace {
     mutable std::map<int, int> degeneracy;
     std::vector<std::vector<int>> neighbors_vector;
 };
-
-#endif

@@ -234,8 +234,8 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
 
     //! set all suff stats to 0
     void Clear() {
-        for (int i = 0; i < this->GetNrow(); i++) {
-            for (int j = 0; j < this->GetNcol(); j++) { (*this)(i, j).Clear(); }
+        for (int row = 0; row < this->GetNrow(); row++) {
+            for (int col = 0; col < this->GetNcol(); col++) { (*this)(row, col).Clear(); }
         }
     }
 
@@ -252,9 +252,9 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
     //! \brief add suffstatarray given as argument to this array based on the allocations provided
     //! as the second argument (mixture models)
     void Add(const BidimSelector<PathSuffStat> &suffstatarray, const Selector<int> &col_alloc) {
-        for (int i = 0; i < this->GetNrow(); i++) {
-            for (int j = 0; j < this->GetNcol(); j++) {
-                (*this)(i, col_alloc.GetVal(j)) += suffstatarray.GetVal(i, j);
+        for (int row = 0; row < this->GetNrow(); row++) {
+            for (int col = 0; col < this->GetNcol(); col++) {
+                (*this)(row, col_alloc.GetVal(col)) += suffstatarray.GetVal(row, col);
             }
         }
     }
@@ -262,38 +262,51 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
     //! return total log prob (summed over all items), given a bi-dimensional
     //! array of rate matrices
     double GetLogProb(const BidimSelector<SubMatrix> &matrixarray) const {
-        assert(matrixarray.GetNcol() == this->GetNcol());
-        assert(matrixarray.GetNrow() == this->GetNrow());
         double total = 0;
-        for (int i = 0; i < this->GetNrow(); i++) { total += GetRowLogProb(i, matrixarray); }
+        for (int row = 0; row < this->GetNrow(); row++) { total += GetRowLogProb(row, matrixarray); }
         return total;
     }
 
     //! return log prob summed over a given column
-    double GetColLogProb(int j, const BidimSelector<SubMatrix> &matrixarray) const {
+    double GetColLogProb(int col, const BidimSelector<SubMatrix> &matrixarray) const {
+        assert(matrixarray.GetNrow() == this->GetNrow());
+        assert(matrixarray.GetNcol() == this->GetNcol());
         double total = 0;
-        for (int i = 0; i < this->GetNrow(); i++) {
-            total += GetVal(i, j).GetLogProb(matrixarray.GetVal(i, j));
+        for (int row = 0; row < this->GetNrow(); row++) {
+            total += GetVal(row, col).GetLogProb(matrixarray.GetVal(row, col));
+        }
+        return total;
+    }
+
+    //! return log prob summed over a given column
+    double GetColLogProb(int col, const BidimSelector<SubMatrix> &matrixarray, int col_matrixarray) const {
+        assert(matrixarray.GetNrow() == this->GetNrow());
+        assert(col_matrixarray < matrixarray.GetNcol());
+        double total = 0;
+        for (int row = 0; row < this->GetNrow(); row++) {
+            total += GetVal(row, col).GetLogProb(matrixarray.GetVal(row, col_matrixarray));
         }
         return total;
     }
 
     //! return log prob summed over a given row
-    double GetRowLogProb(int i, const BidimSelector<SubMatrix> &matrixarray) const {
+    double GetRowLogProb(int row, const BidimSelector<SubMatrix> &matrixarray) const {
+        assert(matrixarray.GetNrow() == this->GetNrow());
+        assert(matrixarray.GetNcol() == this->GetNcol());
         double total = 0;
-        for (int j = 0; j < this->GetNcol(); j++) {
-            total += GetVal(i, j).GetLogProb(matrixarray.GetVal(i, j));
+        for (int col = 0; col < this->GetNcol(); col++) {
+            total += GetVal(row, col).GetLogProb(matrixarray.GetVal(row, col));
         }
         return total;
     }
 
     //! return log prob summed over a given column (and only for items for which
     //! flag is non 0)
-    double GetLogProb(int j, const std::vector<int> &row_flag,
+    double GetLogProb(int col, const std::vector<int> &row_flag,
         const BidimSelector<SubMatrix> &matrixarray) const {
         double total = 0;
-        for (int i = 0; i < this->GetNrow(); i++) {
-            if (row_flag[i]) { total += GetVal(i, j).GetLogProb(matrixarray.GetVal(i, j)); }
+        for (int row = 0; row < this->GetNrow(); row++) {
+            if (row_flag[row]) { total += GetVal(row, col).GetLogProb(matrixarray.GetVal(row, col)); }
         }
         return total;
     }
