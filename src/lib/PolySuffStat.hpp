@@ -34,37 +34,19 @@ class PolySuffStat : public SuffStat {
     //! add Poly sufficient statistics from PhyloProcess (site-homogeneous case)
     void AddSuffStat(const PhyloProcess &process) { process.AddPolySuffStat(*this); }
 
-    void Add(const PolySuffStat &suffstat) {
-        for (auto const &i : suffstat.GetPairCountMap()) { AddPairCount(i.first, i.second); }
-    }
+    void Add(const PolySuffStat &suffstat);
 
     PolySuffStat &operator+=(const PolySuffStat &from) {
         Add(from);
         return *this;
     }
 
-    int GetPairCount(std::tuple<int, int, unsigned, unsigned> poly_tuple) const {
-        auto const i = polycount.find(poly_tuple);
-        if (i == polycount.end()) { return 0; }
-        return i->second;
-    }
+    int GetPairCount(std::tuple<int, int, unsigned, unsigned> poly_tuple) const;
 
     //! return log p(S | Q) as a function of the fitness vector, the nucmatrix and theta
     double GetLogProb(PoissonRandomField &poissonrandomfield,
         const std::vector<double> &aafitnessarray, const GTRSubMatrix &nucmatrix,
-        const double &theta) const {
-        double total = 0;
-        for (auto const &i : polycount) {
-            double proba = poissonrandomfield.GetProb(std::get<0>(i.first), std::get<1>(i.first),
-                std::get<2>(i.first), std::get<3>(i.first), aafitnessarray, nucmatrix, theta);
-            if (proba > 0) {
-                total += i.second * log(proba);
-            } else {
-                total = -std::numeric_limits<double>::infinity();
-            }
-        }
-        return total;
-    }
+        const double &theta) const;
 
     //! const access to the ordered map giving the pair count stat (sparse data
     //! structure)
@@ -90,9 +72,7 @@ class PolySuffStatArray : public SimpleArray<PolySuffStat> {
     ~PolySuffStatArray() {}
 
     //! set all suff stats to 0
-    void Clear() {
-        for (int i = 0; i < GetSize(); i++) { (*this)[i].Clear(); }
-    }
+    void Clear();
 
     //! add Poly sufficient statistics from PhyloProcess (site-heterogeneous case)
     void AddSuffStat(const PhyloProcess &process) { process.AddPolySuffStat(*this); }
@@ -101,23 +81,12 @@ class PolySuffStatArray : public SimpleArray<PolySuffStat> {
     //! nucmatrix and theta
     double GetLogProb(PoissonRandomField &poissonrandomfield,
         const Selector<std::vector<double>> &siteaafitnessarray, const GTRSubMatrix &nucmatrix,
-        const double &theta) const {
-        double total = 0;
-        for (int i = 0; i < GetSize(); i++) {
-            total += GetVal(i).GetLogProb(
-                poissonrandomfield, siteaafitnessarray.GetVal(i), nucmatrix, theta);
-        }
-        return total;
-    }
+        const double &theta) const;
 
     //! \brief add suffstatarray given as argument to this array based on the
     //! allocations provided as the second argument (mixture models)
     //!
-    void Add(const Selector<PolySuffStat> &suffstatarray, const Selector<int> &alloc) {
-        for (int i = 0; i < suffstatarray.GetSize(); i++) {
-            (*this)[alloc.GetVal(i)] += suffstatarray.GetVal(i);
-        }
-    }
+    void Add(const Selector<PolySuffStat> &suffstatarray, const Selector<int> &alloc);
 };
 
 /**
@@ -135,11 +104,7 @@ class PolySuffStatBidimArray : public SimpleBidimArray<PolySuffStat> {
     ~PolySuffStatBidimArray() {}
 
     //! set all suff stats to 0
-    void Clear() {
-        for (int row = 0; row < GetNrow(); row++) {
-            for (int col = 0; col < GetNcol(); col++) { (*this)(row, col).Clear(); }
-        }
-    }
+    void Clear();
 
     //! add Poly sufficient statistics from PhyloProcess (site-heterogeneous and
     //! branch-heterogeneous case)
@@ -149,27 +114,10 @@ class PolySuffStatBidimArray : public SimpleBidimArray<PolySuffStat> {
     //! nucmatrix and theta per taxon
     double GetLogProb(PoissonRandomField &poissonrandomfield,
         const Selector<std::vector<double>> &siteaafitnessarray, const GTRSubMatrix &nucmatrix,
-        const ScaledMutationRate &theta) const {
-        double total = 0;
-        for (int row = 0; row < GetNrow(); row++) {
-            double d_theta = theta.GetTheta(row);
-            for (int col = 0; col < GetNcol(); col++) {
-                total += GetVal(row, col).GetLogProb(poissonrandomfield,
-                    siteaafitnessarray.GetVal(col), nucmatrix, d_theta);
-            };
-        }
-        return total;
-    }
+        const ScaledMutationRate &theta) const;
 
     //! \brief add suffstatarray given as argument to this array based on the
     //! allocations provided as the second argument (mixture models)
     //!
-    void Add(
-        const BidimSelector<PolySuffStat> &suffstatbidimarray, const Selector<int> &col_alloc) {
-        for (int row = 0; row < suffstatbidimarray.GetNrow(); row++) {
-            for (int col = 0; col < suffstatbidimarray.GetNcol(); col++) {
-                (*this)(row, col_alloc.GetVal(col)) += suffstatbidimarray.GetVal(row, col);
-            }
-        }
-    }
+    void Add(const BidimSelector<PolySuffStat> &suffstatbidimarray, const Selector<int> &col_alloc);
 };

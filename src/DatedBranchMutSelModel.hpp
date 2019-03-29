@@ -14,7 +14,7 @@
 #include "IIDGamma.hpp"
 #include "Move.hpp"
 #include "MultinomialAllocationVector.hpp"
-#include "NodeMultivariateProcess.hpp"
+#include "MultivariateProcess.hpp"
 #include "Permutation.hpp"
 #include "PhyloProcess.hpp"
 #include "PolyProcess.hpp"

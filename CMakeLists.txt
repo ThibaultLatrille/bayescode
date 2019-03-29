@@ -30,6 +30,7 @@ add_library (tree_lib STATIC "src/tree/implem.cpp")
 
 set(BAYESCODE_LIB
     src/lib/AAMutSelOmegaCodonSubMatrix.cpp
+    src/lib/AAMutSelNeCodonMatrixBidimArray.cpp
     src/lib/BranchSitePath.cpp
     src/lib/Chain.cpp
     src/lib/Chrono.cpp
@@ -45,8 +46,13 @@ set(BAYESCODE_LIB
     src/lib/StateSpace.cpp
     src/lib/SubMatrix.cpp
     src/lib/TaxonSet.cpp
+    src/lib/Chronogram.cpp
+    src/lib/MultivariateProcess.cpp
+    src/lib/ScaledMutationRateCompound.cpp
+    src/lib/ScatterSuffStat.cpp
     src/lib/PolyData.cpp
     src/lib/PolyProcess.cpp
+    src/lib/PolySuffStat.cpp
     src/lib/PoissonRandomField.cpp
   )
 add_library (bayescode_lib STATIC ${BAYESCODE_LIB})

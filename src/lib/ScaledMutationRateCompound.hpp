@@ -1,6 +1,7 @@
 #pragma once
 
-#include "NodeMultivariateProcess.hpp"
+#include "MultivariateProcess.hpp"
+#include "ScaledMutationRate.hpp"
 
 /**
  * \brief A ScaledMutationRate that returns the scaled mutation rate (theta=4*Ne*u) as a compound
@@ -15,25 +16,16 @@ class NodeProcessScaledMutationRate : public ScaledMutationRate {
     //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
     //! rate (a NodeProcess) and the population size (a NodeProcess).
     NodeProcessScaledMutationRate(int Ntaxa, double const &intheta_scale,
-        NodeProcess const *innode_rates, NodeProcess const *innode_popsize, TaxonSet const &taxon)
-        : theta_scale{intheta_scale}, node_rates{innode_rates}, node_popsize{innode_popsize} {
-        reverse_index_table = taxon.get_reverse_index_table(&node_rates->GetTree());
-        theta.resize(taxon.GetNtaxa());
-    };
+        NodeProcess const *innode_rates, NodeProcess const *innode_popsize, TaxonSet const &taxon);
+    ;
 
     ~NodeProcessScaledMutationRate() override = default;
 
-    double GetTheta(int taxon) const override {
-        Tree::NodeIndex node = reverse_index_table[taxon];
-        assert(node_rates->GetTree().is_leaf(node));
-        return theta_scale * node_rates->GetExpVal(node) * node_popsize->GetExpVal(node);
-    }
+    double GetTheta(int taxon) const override;
 
     double &operator[](int taxon) { return theta[taxon]; }
 
-    void Update() {
-        for (size_t taxon = 0; taxon < theta.size(); taxon++) { theta[taxon] = GetTheta(taxon); }
-    }
+    void Update();
 
   private:
     double const &theta_scale;
@@ -49,11 +41,7 @@ class BranchWiseProcessScaledMutationRate : public ScaledMutationRate {
     //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
     //! rate (a NodeProcess) and the population size (a NodeProcess).
     BranchWiseProcessScaledMutationRate(int Ntaxa, double const &intheta_scale,
-        LeafMultivariateProcess &inleaf_multivariate_process, TaxonSet const &taxon)
-        : theta_scale{intheta_scale}, leaf_multivariate_process{inleaf_multivariate_process} {
-        reverse_index_table = taxon.get_reverse_index_table(&leaf_multivariate_process.GetTree());
-        theta.resize(taxon.GetNtaxa());
-    };
+        LeafMultivariateProcess &inleaf_multivariate_process, TaxonSet const &taxon);
 
     ~BranchWiseProcessScaledMutationRate() override = default;
 
@@ -61,19 +49,9 @@ class BranchWiseProcessScaledMutationRate : public ScaledMutationRate {
 
     double &operator[](int taxon) { return theta[taxon]; }
 
-    void SlidingTaxonMove(int taxon, int dimension, double m) {
-        Tree::NodeIndex node = reverse_index_table[taxon];
-        assert(leaf_multivariate_process.GetTree().is_leaf(node));
-        leaf_multivariate_process[node](dimension) += m;
-        theta[taxon] = theta_scale * leaf_multivariate_process.GetTheta(node);
-    }
+    void SlidingTaxonMove(int taxon, int dimension, double m);
 
-    void Update() {
-        for (size_t taxon = 0; taxon < theta.size(); taxon++) {
-            theta[taxon] =
-                theta_scale * leaf_multivariate_process.GetTheta(reverse_index_table[taxon]);
-        }
-    }
+    void Update();
 
   private:
     double const &theta_scale;

@@ -9,7 +9,7 @@
 #include "GammaSuffStat.hpp"
 #include "IIDGamma.hpp"
 #include "Move.hpp"
-#include "NodeMultivariateProcess.hpp"
+#include "MultivariateProcess.hpp"
 #include "PhyloProcess.hpp"
 #include "ScatterSuffStat.hpp"
 #include "components/ChainComponent.hpp"
