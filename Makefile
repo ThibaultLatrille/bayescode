@@ -48,7 +48,7 @@ format:
 # ==============================================================================================================
 #  TESTING
 # ==============================================================================================================
-POINTS=3
+POINTS=2
 
 .PHONY: run-unit-tests
 run-unit-tests: all
@@ -98,7 +98,7 @@ run-app-tests: all
 	@echo "\n\e[35m\e[1m== Dated Branch Omega restart ===============================================\e[0m"
 	_build/dated _test/dated_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel run =========================================================\e[0m"
-	_build/branchmutsel --ncat 10 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/branchmutsel_gal4
+	_build/branchmutsel --ncat 3 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/branchmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel restart =====================================================\e[0m"
 	_build/branchmutsel _test/branchmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel read ========================================================\e[0m"

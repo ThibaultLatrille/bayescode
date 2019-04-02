@@ -1440,13 +1440,11 @@ class DatedMutSelModel : public ChainComponent {
         double max = 0;
         const std::vector<double> &w = weight->GetArray();
 
-        // !!!!! Here the branch should not matter, so we use the root.
-        const PathSuffStat &suffstat = branchsitepathsuffstatbidimarray->GetVal(0, site);
-        for (int i = 0; i < Ncat; i++) {
-            // !!!!! Here the condition should not matter, so we use site 0.
-            double tmp = suffstat.GetLogProb(branchcomponentcodonmatrixarray->GetVal(0, 0));
-            postprob[i] = tmp;
-            if ((!i) || (max < tmp)) { max = tmp; }
+        for (int cat = 0; cat < Ncat; cat++) {
+            double tmp = branchsitepathsuffstatbidimarray->GetColLogProb(
+                    site, *branchcomponentcodonmatrixarray, cat);
+            postprob[cat] = tmp;
+            if ((!cat) || (max < tmp)) { max = tmp; }
         }
 
         double total = 0;

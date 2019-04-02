@@ -22,7 +22,7 @@ class BranchComponentMatrixSelector : public BranchSiteSelector<T> {
         const Tree &intree)
         : matrixbidimarray(inmatrixbidimarray), alloc(inalloc), tree{intree} {}
 
-    int GetSize() const override { return matrixbidimarray->GetNcol(); }
+    int GetSize() const override { return alloc->GetSize(); }
 
     const T &GetVal(Tree::BranchIndex branch, int site) const override {
         return matrixbidimarray->GetVal(branch, alloc->GetVal(site));
@@ -54,7 +54,7 @@ class RootComponentMatrixSelector : public Selector<T> {
 
     ~RootComponentMatrixSelector() = default;
 
-    int GetSize() const override { return matrixarray->GetSize(); }
+    int GetSize() const override { return alloc->GetSize(); }
 
     const T &GetVal(int site) const override { return matrixarray->GetVal(alloc->GetVal(site)); }
 

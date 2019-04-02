@@ -44,6 +44,7 @@ double PolySuffStatArray::GetLogProb(PoissonRandomField &poissonrandomfield,
 
 void PolySuffStatArray::Add(
     const Selector<PolySuffStat> &suffstatarray, const Selector<int> &alloc) {
+    assert(alloc.GetSize() == suffstatarray.GetSize());
     for (int i = 0; i < suffstatarray.GetSize(); i++) {
         (*this)[alloc.GetVal(i)] += suffstatarray.GetVal(i);
     }
@@ -71,6 +72,8 @@ double PolySuffStatBidimArray::GetLogProb(PoissonRandomField &poissonrandomfield
 
 void PolySuffStatBidimArray::Add(
     const BidimSelector<PolySuffStat> &suffstatbidimarray, const Selector<int> &col_alloc) {
+    assert(suffstatbidimarray.GetNrow() == this->GetNrow());
+    assert(suffstatbidimarray.GetNcol() == col_alloc.GetSize());
     for (int row = 0; row < suffstatbidimarray.GetNrow(); row++) {
         for (int col = 0; col < suffstatbidimarray.GetNcol(); col++) {
             (*this)(row, col_alloc.GetVal(col)) += suffstatbidimarray.GetVal(row, col);

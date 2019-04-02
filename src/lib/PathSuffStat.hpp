@@ -251,10 +251,12 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
 
     //! \brief add suffstatarray given as argument to this array based on the allocations provided
     //! as the second argument (mixture models)
-    void Add(const BidimSelector<PathSuffStat> &suffstatarray, const Selector<int> &col_alloc) {
-        for (int row = 0; row < this->GetNrow(); row++) {
-            for (int col = 0; col < this->GetNcol(); col++) {
-                (*this)(row, col_alloc.GetVal(col)) += suffstatarray.GetVal(row, col);
+    void Add(const BidimSelector<PathSuffStat> &suffstatbidimarray, const Selector<int> &col_alloc) {
+        assert(suffstatbidimarray.GetNrow() == this->GetNrow());
+        assert(suffstatbidimarray.GetNcol() == col_alloc.GetSize());
+        for (int row = 0; row < suffstatbidimarray.GetNrow(); row++) {
+            for (int col = 0; col < suffstatbidimarray.GetNcol(); col++) {
+                (*this)(row, col_alloc.GetVal(col)) += suffstatbidimarray.GetVal(row, col);
             }
         }
     }
@@ -263,7 +265,7 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
     //! array of rate matrices
     double GetLogProb(const BidimSelector<SubMatrix> &matrixarray) const {
         double total = 0;
-        for (int row = 0; row < this->GetNrow(); row++) { total += GetRowLogProb(row, matrixarray); }
+        for (int row = 0; row < matrixarray.GetNrow(); row++) { total += GetRowLogProb(row, matrixarray); }
         return total;
     }
 
@@ -283,7 +285,7 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
         assert(matrixarray.GetNrow() == this->GetNrow());
         assert(col_matrixarray < matrixarray.GetNcol());
         double total = 0;
-        for (int row = 0; row < this->GetNrow(); row++) {
+        for (int row = 0; row < matrixarray.GetNrow(); row++) {
             total += GetVal(row, col).GetLogProb(matrixarray.GetVal(row, col_matrixarray));
         }
         return total;
@@ -294,19 +296,8 @@ class PathSuffStatBidimArray : public SimpleBidimArray<PathSuffStat> {
         assert(matrixarray.GetNrow() == this->GetNrow());
         assert(matrixarray.GetNcol() == this->GetNcol());
         double total = 0;
-        for (int col = 0; col < this->GetNcol(); col++) {
+        for (int col = 0; col < matrixarray.GetNcol(); col++) {
             total += GetVal(row, col).GetLogProb(matrixarray.GetVal(row, col));
-        }
-        return total;
-    }
-
-    //! return log prob summed over a given column (and only for items for which
-    //! flag is non 0)
-    double GetLogProb(int col, const std::vector<int> &row_flag,
-        const BidimSelector<SubMatrix> &matrixarray) const {
-        double total = 0;
-        for (int row = 0; row < this->GetNrow(); row++) {
-            if (row_flag[row]) { total += GetVal(row, col).GetLogProb(matrixarray.GetVal(row, col)); }
         }
         return total;
     }

@@ -433,8 +433,8 @@ class DatedBranchMutSelModel : public ChainComponent {
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
         theta_scale = 1e-5;
         if (polydata != nullptr) {
-            poissonrandomfield =
-                new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
+            poissonrandomfield = new PoissonRandomField(
+                polydata->GetSampleSizeSet(), *GetCodonStateSpace(), precision);
             polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
                 *siteaafitnessarray, *nucmatrix, *theta);
             taxoncomponentpolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Ncat);
@@ -638,6 +638,8 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! \brief return total log prior (up to some constant)
     double GetLogPrior() const {
         double total = 0;
+        // TO FIX : Implement wishart log prior (not absolutely needed since the precision matrix is
+        // sampled from the posterior)
         total += BranchMultivariateLogPrior();
 
         if (!clamp_nuc_matrix) { total += NucRatesLogPrior(); }
@@ -1001,6 +1003,7 @@ class DatedBranchMutSelModel : public ChainComponent {
                 MoveBranchRate(0.05, 3);
             } else {
                 std::cerr << "Clamping mutation rates is not yet implemented" << std::endl;
+                exit(1);
             }
 
             CollectSitePathSuffStat();
@@ -1344,7 +1347,6 @@ class DatedBranchMutSelModel : public ChainComponent {
         const std::vector<double> &w = weight->GetArray();
 
         for (int cat = 0; cat < Ncat; cat++) {
-            // !!!!! TO FIX : I'm not sure what I'm doing here (see GetAllocPostProb in MutSel).
             double tmp = branchsitepathsuffstatbidimarray->GetColLogProb(
                 site, *branchcomponentcodonmatrixarray, cat);
             postprob[cat] = tmp;

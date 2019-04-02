@@ -24,7 +24,6 @@ const char RNAset[] = {'A', 'C', 'G', 'U', 'a', 'c', 'g', 'u', 'B', 'D', 'H', 'K
 
 // amino acids
 
-const int precision = 10000;
 const std::string Alphabet = "Amino_Acids";
 const char AminoAcids[] = {'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q',
     'R', 'S', 'T', 'V', 'W', 'Y', '-'};
