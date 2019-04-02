@@ -165,7 +165,7 @@ class PhyloProcess {
     // TO FIX: why is this method required to be public while the other AddSuffStat are not.
 
 
-private:
+  private:
     double GetFastLogProb() const;
     double FastSiteLogLikelihood(int site) const;
 
@@ -239,8 +239,9 @@ private:
     //! DiffSelModel) heterogeneeous across sites, branches partitioned into
     //! conditions
     void AddPathSuffStat(
-        BidimArray<PathSuffStat> &suffstatarray, const BranchSelector<int> &branchalloc) const;
-    void AddPathSuffStat(BidimArray<PathSuffStat> &suffstatarray) const;
+        BidimArray<PathSuffStat> &suffstatbidimarray, const BranchSelector<int> &branchalloc) const;
+    void AddPathSuffStat(
+        BidimArray<PathSuffStat> &suffstatbidimarray, Array<PathSuffStat> &rootsuffstatarray) const;
 
     //! compute path sufficient statistics across all sites and branches and add
     //! them to suffstat (site-branch-homogeneous model)
@@ -262,16 +263,16 @@ private:
 
     void RecursiveAddPathSuffStat(
         Tree::NodeIndex from, NodeArray<PathSuffStat> &suffstatarray) const;
-    void LocalAddPathSuffStat(Tree::NodeIndex from, NodeArray<PathSuffStat> &suffstatarray) const;
 
     void RecursiveAddPathSuffStat(Tree::NodeIndex from, Array<PathSuffStat> &suffstatarray) const;
     void LocalAddPathSuffStat(Tree::NodeIndex from, Array<PathSuffStat> &suffstatarray) const;
 
-    void RecursiveAddPathSuffStat(Tree::NodeIndex from, BidimArray<PathSuffStat> &suffstatarray,
-        const BranchSelector<int> &branchalloc) const;
-    void RecursiveAddPathSuffStat(Tree::NodeIndex from, BidimArray<PathSuffStat> &suffstatarray) const;
+    void RecursiveAddPathSuffStat(Tree::NodeIndex from,
+        BidimArray<PathSuffStat> &suffstatbidimarray, const BranchSelector<int> &branchalloc) const;
+    void RecursiveAddPathSuffStat(Tree::NodeIndex from,
+        BidimArray<PathSuffStat> &suffstatbidimarray, Array<PathSuffStat> &rootsuffstatarray) const;
     void LocalAddPathSuffStat(
-        Tree::NodeIndex from, BidimArray<PathSuffStat> &suffstatarray, int cond) const;
+        Tree::NodeIndex from, BidimArray<PathSuffStat> &suffstatbidimarray, int row) const;
 
     void RecursiveAddLengthSuffStat(
         Tree::NodeIndex from, BranchArray<PoissonSuffStat> &branchlengthpathsuffstatarray) const;

@@ -89,32 +89,6 @@ std::istream &operator>>(std::istream &is, BidimArray<T> &array) {
 }
 
 /**
- * \brief A BidimSelector<T> that returns a reference to the same value T for
- * any pair of indices (i,j)
- */
-
-template <class T>
-class BidimHomogeneousSelector : public BidimSelector<T> {
-  public:
-    //! \brief Constructor, taking as its arguments the number of rows and columns
-    //! of the array and the value to be returned for any pair of indices
-    BidimHomogeneousSelector(int innrow, int inncol, const T &invalue)
-        : nrow(innrow), ncol(inncol), value(invalue) {}
-    ~BidimHomogeneousSelector() {}
-
-    int GetNrow() const override { return nrow; }
-    int GetNcol() const override { return ncol; }
-
-    //! return a reference to the same value (i.e. value) for any pair of indices
-    const T &GetVal(int i, int j) const override { return value; }
-
-  private:
-    int nrow;
-    int ncol;
-    const T &value;
-};
-
-/**
  * \brief The 'standard' implementation of a BidimArray<T>, simply as a
  * vector<vector<T> >
  *

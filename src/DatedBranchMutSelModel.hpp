@@ -214,12 +214,11 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     // Bi-dimensional array of codon matrices (one for each distinct branch condition, and one for
     // each aa fitness profile)
-    MutSelNeCodonMatrixBidimArray *branchcomponentcodonmatrixarray;
-    AAMutSelNeCodonSubMatrixArray *rootcomponentcodonmatrixarray;
-
+    MutSelNeCodonMatrixBidimArray *branchcomponentcodonmatrixbidimarray;
     // this one is used by PhyloProcess: has to be a BranchComponentMatrixSelector<SubMatrix>
-    BranchComponentMatrixSelector<SubMatrix> *branchsitecodonmatrixarray;
+    BranchComponentMatrixSelector<SubMatrix> *branchsitecodonmatrixbidimarray;
 
+    AAMutSelNeCodonSubMatrixArray *rootcomponentcodonmatrixarray;
     // this one is also used by PhyloProcess: has to be a RootComponentMatrixSelector<SubMatrix>
     RootComponentMatrixSelector<SubMatrix> *rootsitecodonmatrixarray;
 
@@ -237,6 +236,9 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     PathSuffStatBidimArray *branchcomponentpathsuffstatbidimarray;
     PathSuffStatBidimArray *branchsitepathsuffstatbidimarray;
+
+    PathSuffStatArray *rootcomponentpathsuffstatarray;
+    PathSuffStatArray *rootsitepathsuffstatarray;
 
     PolySuffStatBidimArray *taxoncomponentpolysuffstatbidimarray{nullptr};
     PolySuffStatBidimArray *taxonsitepolysuffstatbidimarray{nullptr};
@@ -416,16 +418,14 @@ class DatedBranchMutSelModel : public ChainComponent {
         occupancy = new OccupancySuffStat(Ncat);
 
         // codon matrices per branch and per site
-        branchcomponentcodonmatrixarray = new MutSelNeCodonMatrixBidimArray(
+        branchcomponentcodonmatrixbidimarray = new MutSelNeCodonMatrixBidimArray(
             GetCodonStateSpace(), nucmatrix, componentaafitnessarray, branchpopsize->GetArray());
-
         // sub matrices per branch and per site
-        branchsitecodonmatrixarray = new BranchComponentMatrixSelector<SubMatrix>(
-            branchcomponentcodonmatrixarray, sitealloc, *tree);
+        branchsitecodonmatrixbidimarray = new BranchComponentMatrixSelector<SubMatrix>(
+            branchcomponentcodonmatrixbidimarray, sitealloc, *tree);
 
         rootcomponentcodonmatrixarray = new AAMutSelNeCodonSubMatrixArray(
             GetCodonStateSpace(), nucmatrix, componentaafitnessarray, branchpopsize->GetRootVal());
-
         // sub matrices for root, across sites
         rootsitecodonmatrixarray =
             new RootComponentMatrixSelector<SubMatrix>(rootcomponentcodonmatrixarray, sitealloc);
@@ -442,11 +442,14 @@ class DatedBranchMutSelModel : public ChainComponent {
         }
 
         phyloprocess = new PhyloProcess(tree.get(), codondata, branchlength, nullptr,
-            branchsitecodonmatrixarray, rootsitecodonmatrixarray, polyprocess);
+            branchsitecodonmatrixbidimarray, rootsitecodonmatrixarray, polyprocess);
         phyloprocess->Unfold();
 
         branchcomponentpathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Ncat);
         branchsitepathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Nsite);
+        rootcomponentpathsuffstatarray = new PathSuffStatArray(Ncat);
+        rootsitepathsuffstatarray = new PathSuffStatArray(Nsite);
+
         scattersuffstat = new ScatterSuffStat(*tree);
         branchlengthpathsuffstatarray = new PoissonSuffStatBranchArray(*tree);
     }
@@ -550,8 +553,8 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! \brief tell the codon matrices that their parameters have changed and that
     //! they should be updated
     void UpdateCodonMatrices() {
-        branchcomponentcodonmatrixarray->SetNe(branchpopsize->GetArray());
-        branchcomponentcodonmatrixarray->CorruptCodonMatrices();
+        branchcomponentcodonmatrixbidimarray->SetNe(branchpopsize->GetArray());
+        branchcomponentcodonmatrixbidimarray->CorruptCodonMatrices();
         rootcomponentcodonmatrixarray->SetNe(branchpopsize->GetRootVal());
         rootcomponentcodonmatrixarray->UpdateCodonMatrices();
     }
@@ -559,7 +562,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! \brief tell codon matrices for site i and across conditions that their parameters have
     //! changed and that they should be updated
     void UpdateCodonMatrix(int i) {
-        branchcomponentcodonmatrixarray->CorruptColCodonMatrices(i);
+        branchcomponentcodonmatrixbidimarray->CorruptColCodonMatrices(i);
         rootcomponentcodonmatrixarray->UpdateCodonMatrices(i);
     }
 
@@ -603,8 +606,8 @@ class DatedBranchMutSelModel : public ChainComponent {
     void UpdateBranchRates(Tree::BranchIndex branch) { branchlength->UpdateBranch(branch); }
 
     void UpdateBranchPopSize(Tree::BranchIndex branch) {
-        branchcomponentcodonmatrixarray->SetRowNe(branch, branchpopsize->GetVal(branch));
-        branchcomponentcodonmatrixarray->CorruptRowCodonMatrices(branch);
+        branchcomponentcodonmatrixbidimarray->SetRowNe(branch, branchpopsize->GetVal(branch));
+        branchcomponentcodonmatrixbidimarray->CorruptRowCodonMatrices(branch);
     }
 
     void UpdateModel() {
@@ -752,13 +755,16 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! collect sufficient statistics for substitution mappings across sites
     void CollectSitePathSuffStat() {
         branchsitepathsuffstatbidimarray->Clear();
-        branchsitepathsuffstatbidimarray->AddSuffStat(*phyloprocess);
+        rootsitepathsuffstatarray->Clear();
+        branchsitepathsuffstatbidimarray->AddSuffStat(*phyloprocess, *rootsitepathsuffstatarray);
     }
 
     //! gather site-specific sufficient statistics component-wise
     void CollectComponentPathSuffStat() {
         branchcomponentpathsuffstatbidimarray->Clear();
         branchcomponentpathsuffstatbidimarray->Add(*branchsitepathsuffstatbidimarray, *sitealloc);
+        rootcomponentpathsuffstatarray->Clear();
+        rootcomponentpathsuffstatarray->Add(*rootsitepathsuffstatarray, *sitealloc);
     }
 
     //! collect sufficient statistics at the tips of the tree
@@ -848,6 +854,22 @@ class DatedBranchMutSelModel : public ChainComponent {
         }
     }
 
+    //! return log prob only at the tips due to polymorphism of the substitution
+    //! mapping, for a given sites if allocated to component cat of the mixture
+    double SitePolySuffStatLogProbGivenComponent(int site, int cat) const {
+        if (polyprocess != nullptr) {
+            double tot = 0;
+            for (int taxon = 0; taxon < Ntaxa; taxon++) {
+                tot += taxonsitepolysuffstatbidimarray->GetVal(taxon, site)
+                           .GetLogProb(*poissonrandomfield, componentaafitnessarray->GetVal(cat),
+                               *nucmatrix, theta->GetTheta(taxon));
+            }
+            return tot;
+        } else {
+            return 0.0;
+        }
+    }
+
     //! log prob factor to be recomputed when Theta=4*Ne*u
     double ThetaScaleLogProb() const { return ThetaScaleLogPrior() + PolySuffStatLogProb(); }
 
@@ -858,15 +880,30 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! return log prob of the current substitution mapping, as a function of the
     //! current codon substitution process
     double PathSuffStatLogProb() const {
-        return branchcomponentpathsuffstatbidimarray->GetLogProb(*branchcomponentcodonmatrixarray) +
+        return branchcomponentpathsuffstatbidimarray->GetLogProb(
+                   *branchcomponentcodonmatrixbidimarray) +
+               rootcomponentpathsuffstatarray->GetLogProb(*rootcomponentcodonmatrixarray) +
                PolySuffStatLogProb();
     }
 
+    //! return log prob of the substitution mappings, for a given sites if allocated to component
+    //! cat of the mixture
+    double SitePathSuffStatLogProbGivenComponent(int site, int cat) const {
+        return branchsitepathsuffstatbidimarray->GetColLogProb(
+                   site, *branchcomponentcodonmatrixbidimarray, cat) +
+               rootsitepathsuffstatarray->GetVal(site).GetLogProb(
+                   rootcomponentcodonmatrixarray->GetVal(cat)) +
+               SitePolySuffStatLogProbGivenComponent(site, cat);
+        // TO FIX : Is SitePolySuffStatLogProbGivenComponent necessary ?
+    }
+
     //! return log prob of the substitution mappings over sites allocated to
-    //! component k of the mixture
+    //! component cat of the mixture
     double ComponentPathSuffStatLogProb(int cat) const {
         return branchcomponentpathsuffstatbidimarray->GetColLogProb(
-                   cat, *branchcomponentcodonmatrixarray) +
+                   cat, *branchcomponentcodonmatrixbidimarray) +
+               rootcomponentpathsuffstatarray->GetVal(cat).GetLogProb(
+                   rootcomponentcodonmatrixarray->GetVal(cat)) +
                ComponentPolySuffStatLogProb(cat);
     }
 
@@ -874,7 +911,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! omega of a given branch
     double BranchPathSuffStatLogProb(Tree::BranchIndex branch) const {
         return branchcomponentpathsuffstatbidimarray->GetRowLogProb(
-            branch, *branchcomponentcodonmatrixarray);
+            branch, *branchcomponentcodonmatrixbidimarray);
     }
 
     //! return log prob of first-level mixture components (i.e. all amino-acid
@@ -1198,7 +1235,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! resample empty components of the mixture from prior
     void ResampleEmptyComponents() {
         componentaafitnessarray->PriorResample(*occupancy);
-        branchcomponentcodonmatrixarray->UpdateCodonMatrices(*occupancy);
+        branchcomponentcodonmatrixbidimarray->UpdateCodonMatrices(*occupancy);
     }
 
     //! MH move on amino-acid fitness profiles (occupied components only)
@@ -1347,8 +1384,7 @@ class DatedBranchMutSelModel : public ChainComponent {
         const std::vector<double> &w = weight->GetArray();
 
         for (int cat = 0; cat < Ncat; cat++) {
-            double tmp = branchsitepathsuffstatbidimarray->GetColLogProb(
-                site, *branchcomponentcodonmatrixarray, cat);
+            double tmp = SitePathSuffStatLogProbGivenComponent(site, cat);
             postprob[cat] = tmp;
             if ((!cat) || (max < tmp)) { max = tmp; }
         }
@@ -1580,7 +1616,7 @@ class DatedBranchMutSelModel : public ChainComponent {
             if (occupancy->GetVal(cat)) {
                 double cat_dn{0}, cat_dn0{0};
                 std::tie(cat_dn, cat_dn0) =
-                    branchcomponentcodonmatrixarray->GetVal(branch, cat).GetFlowDNDS();
+                    branchcomponentcodonmatrixbidimarray->GetVal(branch, cat).GetFlowDNDS();
                 dn += occupancy->GetVal(cat) * cat_dn;
                 dn0 += occupancy->GetVal(cat) * cat_dn0;
             }
