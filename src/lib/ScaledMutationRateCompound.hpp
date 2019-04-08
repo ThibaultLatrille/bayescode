@@ -15,9 +15,8 @@ class NodeProcessScaledMutationRate : public ScaledMutationRate {
   public:
     //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
     //! rate (a NodeProcess) and the population size (a NodeProcess).
-    NodeProcessScaledMutationRate(int Ntaxa, double const &intheta_scale,
+    NodeProcessScaledMutationRate(double const &intheta_scale,
         NodeProcess const *innode_rates, NodeProcess const *innode_popsize, TaxonSet const &taxon);
-    ;
 
     ~NodeProcessScaledMutationRate() override = default;
 
@@ -40,7 +39,7 @@ class BranchWiseProcessScaledMutationRate : public ScaledMutationRate {
   public:
     //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
     //! rate (a NodeProcess) and the population size (a NodeProcess).
-    BranchWiseProcessScaledMutationRate(int Ntaxa, double const &intheta_scale,
+    BranchWiseProcessScaledMutationRate(double const &intheta_scale,
         LeafMultivariateProcess &inleaf_multivariate_process, TaxonSet const &taxon);
 
     ~BranchWiseProcessScaledMutationRate() override = default;

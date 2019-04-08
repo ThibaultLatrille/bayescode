@@ -225,4 +225,4 @@ int CodonStateSpace::GetDifferingPosition(int i, int j) const {
     return 3;
 }
 
-vector<int> CodonStateSpace::GetNeighbors(int i) { return neighbors_vector[i]; }
+vector<int> CodonStateSpace::GetNeighbors(int i) const { return neighbors_vector[i]; }

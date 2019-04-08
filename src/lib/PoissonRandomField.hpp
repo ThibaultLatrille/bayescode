@@ -1,7 +1,6 @@
 #pragma once
 
 #include <deque>
-#include <map>
 #include <set>
 #include <vector>
 #include "CodonStateSpace.hpp"
@@ -15,8 +14,8 @@
 class PoissonRandomField {
   public:
     //! \brief Constructor: takes a (const pointer to a) PolyData
-    PoissonRandomField(
-        std::set<unsigned> sample_size_set, CodonStateSpace &instatespace, unsigned precision = 6);
+    PoissonRandomField(std::set<unsigned> const &sample_size_set, CodonStateSpace const &instatespace,
+        unsigned precision);
 
     ~PoissonRandomField() /*override*/ = default;
 
@@ -25,25 +24,25 @@ class PoissonRandomField {
     //! likelihood might need to update the pre-computed values
     double GetProb(int anc_state, int der_state, unsigned der_occurence, unsigned sample_size,
         const std::vector<double> &aafitnessarray, const GTRSubMatrix &nucmatrix,
-        const double &theta);
+        const double &theta) const;
 
 
   private:
-    CodonStateSpace &statespace;
+    CodonStateSpace const &statespace;
 
     unsigned precision{10};
     double grid_s_step{0};
 
-    std::map<unsigned, std::deque<std::pair<double, std::vector<double>>>> ComputedProb;
-    std::map<unsigned, std::vector<unsigned long long>> ComputedBinom;
+    std::map<unsigned, std::deque<std::pair<double, std::vector<double>>>> mutable ComputedProb;
+    std::map<unsigned, std::vector<unsigned long long>> mutable ComputedBinom;
 
     //! Use the pre-computed values, and update the data if interpolation is not possible
     double InterpolateProba(int anc_state, int der_state, unsigned der_occurence,
         unsigned sample_size, const std::vector<double> &aafitnessarray,
-        const GTRSubMatrix &nucmatrix);
+        const GTRSubMatrix &nucmatrix) const;
 
     //! Update the precomputed values
-    void UpdateComputed(unsigned sample_size, double s);
+    void UpdateComputed(unsigned sample_size, double s) const;
 
     //! Let i be the number of copies of the derived allele, in a sample of size n.
     //! Return the vector (for all i from 1 to n) of expected time for which we

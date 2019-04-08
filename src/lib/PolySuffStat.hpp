@@ -16,9 +16,8 @@
 
 class PolySuffStat : public SuffStat {
   public:
-    PolySuffStat() {}
-
-    ~PolySuffStat() {}
+    PolySuffStat() = default;
+    ~PolySuffStat() override = default;
 
     //! set suff stats to 0
     void Clear() { polycount.clear(); }
@@ -67,15 +66,11 @@ class PolySuffStat : public SuffStat {
  */
 class PolySuffStatArray : public SimpleArray<PolySuffStat> {
   public:
-    PolySuffStatArray(int insize) : SimpleArray<PolySuffStat>(insize) {}
-
-    ~PolySuffStatArray() {}
+    explicit PolySuffStatArray(int insize) : SimpleArray<PolySuffStat>(insize) {}
+    ~PolySuffStatArray() override = default;
 
     //! set all suff stats to 0
     void Clear();
-
-    //! add Poly sufficient statistics from PhyloProcess (site-heterogeneous case)
-    void AddSuffStat(const PhyloProcess &process) { process.AddPolySuffStat(*this); }
 
     //! return total log prob (summed over all items), given an array of fitness vector, the
     //! nucmatrix and theta
@@ -100,15 +95,10 @@ class PolySuffStatBidimArray : public SimpleBidimArray<PolySuffStat> {
   public:
     PolySuffStatBidimArray(int inrow, int incol)
         : SimpleBidimArray<PolySuffStat>(inrow, incol, PolySuffStat()) {}
-
-    ~PolySuffStatBidimArray() {}
+    ~PolySuffStatBidimArray() override = default;
 
     //! set all suff stats to 0
     void Clear();
-
-    //! add Poly sufficient statistics from PhyloProcess (site-heterogeneous and
-    //! branch-heterogeneous case)
-    void AddSuffStat(const PhyloProcess &process) { process.AddPolySuffStat(*this); }
 
     //! return total log prob (summed over all items), given an array of fitness vector, the
     //! nucmatrix and theta per taxon

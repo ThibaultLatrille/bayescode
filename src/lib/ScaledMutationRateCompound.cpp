@@ -1,6 +1,6 @@
 #include "ScaledMutationRateCompound.hpp"
 
-NodeProcessScaledMutationRate::NodeProcessScaledMutationRate(int Ntaxa, double const &intheta_scale,
+NodeProcessScaledMutationRate::NodeProcessScaledMutationRate(double const &intheta_scale,
     NodeProcess const *innode_rates, NodeProcess const *innode_popsize, TaxonSet const &taxon)
     : theta_scale{intheta_scale}, node_rates{innode_rates}, node_popsize{innode_popsize} {
     reverse_index_table = taxon.get_reverse_index_table(&node_rates->GetTree());
@@ -17,8 +17,7 @@ void NodeProcessScaledMutationRate::Update() {
     for (size_t taxon = 0; taxon < theta.size(); taxon++) { theta[taxon] = GetTheta(taxon); }
 }
 
-BranchWiseProcessScaledMutationRate::BranchWiseProcessScaledMutationRate(int Ntaxa,
-    double const &intheta_scale, LeafMultivariateProcess &inleaf_multivariate_process,
+BranchWiseProcessScaledMutationRate::BranchWiseProcessScaledMutationRate(double const &intheta_scale, LeafMultivariateProcess &inleaf_multivariate_process,
     TaxonSet const &taxon)
     : theta_scale{intheta_scale}, leaf_multivariate_process{inleaf_multivariate_process} {
     reverse_index_table = taxon.get_reverse_index_table(&leaf_multivariate_process.GetTree());

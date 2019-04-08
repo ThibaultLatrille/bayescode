@@ -8,9 +8,11 @@
 using namespace std;
 
 PoissonRandomField::PoissonRandomField(
-    set<unsigned> sample_size_set, CodonStateSpace &instatespace, unsigned precision)
+    set<unsigned> const &sample_size_set, CodonStateSpace const &instatespace, unsigned precision)
     : statespace{instatespace}, precision{precision} {
-    grid_s_step = 20.0 / (PowUnsigned(2, precision) + 1);
+    unsigned nbr_steps = PowUnsigned(2, precision) + 1;
+    std::cerr << "Number of steps (precision) of PRF: " << nbr_steps << std::endl;
+    grid_s_step = 20.0 / nbr_steps;
 
     for (unsigned sample_size : sample_size_set) {
         ComputedProb[sample_size] = deque<pair<double, vector<double>>>();
@@ -22,7 +24,7 @@ PoissonRandomField::PoissonRandomField(
 
 double PoissonRandomField::GetProb(int anc_state, int der_state, unsigned der_occurence,
     unsigned sample_size, const vector<double> &aafitnessarray, const GTRSubMatrix &nucmatrix,
-    const double &theta) {
+    const double &theta) const {
     if (anc_state < 0 or der_state < 0) { return 0.0; }
 
     double proba_obs = 0;
@@ -67,7 +69,7 @@ static struct {
 } PairLowerThan;
 
 double PoissonRandomField::InterpolateProba(int anc_state, int der_state, unsigned der_occurence,
-    unsigned sample_size, const vector<double> &aafitnessarray, const GTRSubMatrix &nucmatrix) {
+    unsigned sample_size, const vector<double> &aafitnessarray, const GTRSubMatrix &nucmatrix) const {
     // Selection coefficient between ancestral and derived codon
     double s = log(aafitnessarray.at(statespace.Translation(der_state)));
     s -= log(aafitnessarray.at(statespace.Translation(anc_state)));
@@ -101,7 +103,7 @@ double PoissonRandomField::InterpolateProba(int anc_state, int der_state, unsign
     return mutation_rate * f;
 }
 
-void PoissonRandomField::UpdateComputed(unsigned sample_size, double s) {
+void PoissonRandomField::UpdateComputed(unsigned sample_size, double s) const {
     while (ComputedProb.at(sample_size).front().first > s) {
         double new_s = ComputedProb.at(sample_size).front().first - grid_s_step;
         ComputedProb.at(sample_size)

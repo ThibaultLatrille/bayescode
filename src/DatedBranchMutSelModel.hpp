@@ -268,10 +268,10 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! - baseNcat: truncation of the second-level stick-breaking process (by
     //! default: 1)
     //! - polymorphism_aware: boolean to force using polymorphism data
-    DatedBranchMutSelModel(std::string indatafile, std::string intreefile, std::string inprofiles,
-        int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware,
-        unsigned inprecision, bool indebug, bool inclamp_rates, bool inclamp_pop_sizes,
-        bool inclamp_nuc_matrix, bool inclamp_corr_matrix)
+    DatedBranchMutSelModel(std::string const &indatafile, std::string const &intreefile,
+        std::string const &inprofiles, int inNcat, int inbaseNcat, bool incondition_aware,
+        bool inpolymorphism_aware, unsigned inprecision, bool indebug, bool inclamp_rates,
+        bool inclamp_pop_sizes, bool inclamp_nuc_matrix, bool inclamp_corr_matrix)
         : datafile(indatafile),
           treefile(intreefile),
           profiles(inprofiles),
@@ -332,8 +332,7 @@ class DatedBranchMutSelModel : public ChainComponent {
             new BranchWiseMultivariateProcess(*chronogram, precision_matrix, dimension);
         if (polydata != nullptr) {
             leaf_multivariate = new LeafMultivariateProcess(*branchwise_multivariate, *taxonset);
-            theta = new BranchWiseProcessScaledMutationRate(
-                Ntaxa, theta_scale, *leaf_multivariate, *taxonset);
+            theta = new BranchWiseProcessScaledMutationRate(theta_scale, *leaf_multivariate, *taxonset);
         }
 
         // Branch omega (brownian process)
@@ -454,7 +453,7 @@ class DatedBranchMutSelModel : public ChainComponent {
         branchlengthpathsuffstatarray = new PoissonSuffStatBranchArray(*tree);
     }
 
-    virtual ~DatedBranchMutSelModel() = default;
+    virtual ~DatedBranchMutSelModel() override = default;
 
     void move(int it) override { Move(); }
 
@@ -500,7 +499,7 @@ class DatedBranchMutSelModel : public ChainComponent {
         }
         for (int i = 0; i < dimension; i++) {
             for (int j = 0; j <= i; j++) {
-                model_stat(info, "Covariance_" + std::to_string(i) + "_" + std::to_string(j),
+                model_stat(info, "Precision_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
             }
         }
@@ -628,7 +627,7 @@ class DatedBranchMutSelModel : public ChainComponent {
         ResampleSub(1.0);
     }
 
-    void PostPred(std::string name) {
+    void PostPred(std::string const &name) {
         UpdateModel();
         UpdateStats();
         phyloprocess->PostPredSample(name);
@@ -771,7 +770,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     void CollectSitePolySuffStat() {
         if (polyprocess != nullptr) {
             taxonsitepolysuffstatbidimarray->Clear();
-            taxonsitepolysuffstatbidimarray->AddSuffStat(*phyloprocess);
+            phyloprocess->AddPolySuffStat(*taxonsitepolysuffstatbidimarray);
         }
     }
 
@@ -1289,7 +1288,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     }
 
     //! helper function: log density of 20 gammas
-    double GammaAALogPrior(
+    static double GammaAALogPrior(
         const std::vector<double> &x, const std::vector<double> &aacenter, double aaconc) {
         double total = 0;
         for (int l = 0; l < Naa; l++) {

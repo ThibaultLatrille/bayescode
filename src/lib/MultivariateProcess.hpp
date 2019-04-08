@@ -144,7 +144,7 @@ class LeafMultivariateProcess : public SimpleNodeArray<EVector> {
     double GetLogProb() const;
 
   protected:
-    std::vector<int> index_table;
+    std::vector<int> reverse_index_table;
     const BranchWiseMultivariateProcess &branchwiseprocess;
 };
 

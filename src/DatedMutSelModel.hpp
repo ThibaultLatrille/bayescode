@@ -432,11 +432,11 @@ class DatedMutSelModel : public ChainComponent {
 
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
         theta_scale = 1e-5;
-        theta = new NodeProcessScaledMutationRate(
-            Ntaxa, theta_scale, noderates, nodepopsize, *taxonset);
         if (polydata != nullptr) {
+            theta =
+                new NodeProcessScaledMutationRate(theta_scale, noderates, nodepopsize, *taxonset);
             poissonrandomfield =
-                new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
+                new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace(), precision);
             polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
                 *siteaafitnessarray, *nucmatrix, *theta);
             taxoncomponentpolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Ncat);
@@ -498,7 +498,7 @@ class DatedMutSelModel : public ChainComponent {
         }
         for (int i = 0; i < dimension; i++) {
             for (int j = 0; j <= i; j++) {
-                model_stat(info, "Covariance_" + std::to_string(i) + "_" + std::to_string(j),
+                model_stat(info, "Precision_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
             }
         }
@@ -639,7 +639,7 @@ class DatedMutSelModel : public ChainComponent {
     }
 
     void UpdateStats() {
-        theta->Update();
+        if (polyprocess != nullptr) { theta->Update(); }
         for (Tree::BranchIndex b = 0; b < Nbranch; b++) { (*branchdnds)[b] = GetPredictedDNDS(b); }
     }
 
@@ -778,7 +778,7 @@ class DatedMutSelModel : public ChainComponent {
     void CollectSitePolySuffStat() {
         if (polyprocess != nullptr) {
             taxonsitepolysuffstatbidimarray->Clear();
-            taxonsitepolysuffstatbidimarray->AddSuffStat(*phyloprocess);
+            phyloprocess->AddPolySuffStat(*taxonsitepolysuffstatbidimarray);
         }
     }
 

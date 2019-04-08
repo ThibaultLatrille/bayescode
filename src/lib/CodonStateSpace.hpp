@@ -21,7 +21,7 @@ class CodonStateSpace : public StateSpace {
 
     //! constructor: should always specify the genetic code (en enum type:
     //! Universal, MtMam or MtInv, see BiologicalSequences.h)
-    CodonStateSpace(GeneticCodeType type);
+    explicit CodonStateSpace(GeneticCodeType type);
     ~CodonStateSpace() throw() override;
 
     int GetNstate() const override { return Nstate; }
@@ -64,7 +64,7 @@ class CodonStateSpace : public StateSpace {
     int GetDifferingPosition(int i, int j) const;
 
     //! \brief return the vector of codons differing at exactly one position
-    std::vector<int> GetNeighbors(int i);
+    std::vector<int> GetNeighbors(int i) const;
 
     //! return the integer encoding for the nucleotide at requested position
     //! pos=0,1, or 2

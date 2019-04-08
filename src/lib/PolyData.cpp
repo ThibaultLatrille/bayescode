@@ -8,7 +8,7 @@ using namespace std;
 template <class T>
 bool item_in_vector(vector<T> const &v, T item) {
     return find(v.begin(), v.end(), item) != v.end();
-};
+}
 
 vector<string> GlobVector(const string &pattern) {
     glob_t glob_result;
@@ -127,7 +127,7 @@ PolyData::PolyData(CodonSequenceAlignment *from_alignment, string const &ali_pat
                                 }
                             }
                         }
-                    };
+                    }
                     word_index++;
                 }
 
@@ -222,7 +222,7 @@ unsigned PolyData::GetCount(int taxon, int site, int state) const {
             return SampleSize.at(taxon);
         } else {
             return 0;
-        };
+        }
     }
 }
 

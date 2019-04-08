@@ -34,8 +34,6 @@ class PhyloProcess {
     friend class PathSuffStat;
     friend class PathSuffStatArray;
     friend class PathSuffStatBidimArray;
-    friend class PolySuffStat;
-    friend class PolySuffStatArray;
     friend class PoissonSuffStatBranchArray;
     friend class PoissonSuffStatArray;
     friend class PathSuffStatNodeArray;
@@ -154,16 +152,20 @@ class PhyloProcess {
     void GetLeafData(SequenceAlignment *data);
 
     int GetPathState(int taxon, int site) const {
-        int node = reverse_taxon_table[taxon];
+        Tree::NodeIndex node = reverse_taxon_table[taxon];
         auto site_leaf_path_map = pathmap[node][site];
         return site_leaf_path_map->GetFinalState();
     }
 
     //! compute path sufficient statistics across all sites and branches and add
+    //! them to suffstat (site-branch-homogeneous model)
+    void AddPolySuffStat(PolySuffStat &suffstat) const;
+    //! compute path sufficient statistics across all sites and branches and add
+    //! them to suffstatarray (site-heterogeneous branch-homogeneous model)
+    void AddPolySuffStat(Array<PolySuffStat> &suffstatarray) const;
+    //! compute path sufficient statistics across all sites and branches and add
     //! them to suffstatbidimarray (site-heterogeneous taxon-heterogeneous model)
     void AddPolySuffStat(BidimArray<PolySuffStat> &suffstatbidimarray) const;
-    // TO FIX: why is this method required to be public while the other AddSuffStat are not.
-
 
   private:
     double GetFastLogProb() const;
@@ -242,13 +244,6 @@ class PhyloProcess {
         BidimArray<PathSuffStat> &suffstatbidimarray, const BranchSelector<int> &branchalloc) const;
     void AddPathSuffStat(
         BidimArray<PathSuffStat> &suffstatbidimarray, Array<PathSuffStat> &rootsuffstatarray) const;
-
-    //! compute path sufficient statistics across all sites and branches and add
-    //! them to suffstat (site-branch-homogeneous model)
-    void AddPolySuffStat(PolySuffStat &suffstat) const;
-    //! compute path sufficient statistics across all sites and branches and add
-    //! them to suffstatarray (site-heterogeneous branch-homogeneous model)
-    void AddPolySuffStat(Array<PolySuffStat> &suffstatarray) const;
 
     //! compute path sufficient statistics for resampling branch lengths add them
     //! to branchlengthpathsuffstatarray

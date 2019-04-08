@@ -161,14 +161,15 @@ LeafMultivariateProcess::LeafMultivariateProcess(
     const BranchWiseMultivariateProcess &inbranchwiseprocess, TaxonSet const &taxon)
     : SimpleNodeArray<EVector>(inbranchwiseprocess.GetTree()),
       branchwiseprocess(inbranchwiseprocess) {
-    index_table = taxon.get_index_table(&branchwiseprocess.GetTree());
-    for (Tree::BranchIndex branch = 0; branch < GetTree().nb_branches(); branch++) {
-        (*this)[branch] = EVector::Zero(branchwiseprocess.GetDimensions());
+    reverse_index_table = taxon.get_reverse_index_table(&branchwiseprocess.GetTree());
+    for (Tree::NodeIndex node = 0; node < static_cast<Tree::NodeIndex>(GetTree().nb_nodes());
+         node++) {
+        (*this)[node] = EVector::Zero(branchwiseprocess.GetDimensions());
     }
 }
 
 double LeafMultivariateProcess::GetTaxonLogProb(int taxon) const {
-    return GetLogProb(index_table[taxon]);
+    return GetLogProb(reverse_index_table[taxon]);
 }
 
 double LeafMultivariateProcess::GetLogProb(Tree::NodeIndex node) const {

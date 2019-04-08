@@ -473,7 +473,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         thetamax = 0.1;
         if (polydata != nullptr) {
             poissonrandomfield =
-                new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace());
+                new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace(), 12);
             polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
                 *siteaafitnessarray, *nucmatrix, *theta);
             sitepolysuffstatarray = new PolySuffStatArray(Nsite);
@@ -861,7 +861,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         sitepathsuffstatarray->AddSuffStat(*phyloprocess);
         if (polyprocess != nullptr) {
             sitepolysuffstatarray->Clear();
-            sitepolysuffstatarray->AddSuffStat(*phyloprocess);
+            phyloprocess->AddPolySuffStat(*sitepolysuffstatarray);
         }
     }
 

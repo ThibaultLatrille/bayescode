@@ -66,10 +66,6 @@ set(BASE_LIBS
 add_executable(globom "src/SingleOmega.cpp")
 target_link_libraries(globom ${BASE_LIBS})
 
-# Single omega chronogram (dated)
-add_executable(dated "src/DatedBranchOmega.cpp")
-target_link_libraries(dated bayescode_lib tree_lib)
-
 # Branch Ne (underlying node Ne) chronogram (datedmutsel)
 add_executable(datedmutsel "src/DatedMutSel.cpp")
 target_link_libraries(datedmutsel bayescode_lib tree_lib)

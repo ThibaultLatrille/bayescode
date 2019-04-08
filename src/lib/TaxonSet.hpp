@@ -27,7 +27,7 @@ class Tree;
 class TaxonSet {
   public:
     //! constructor, based on a vector of taxon names
-    TaxonSet(const std::vector<std::string> &names);
+    explicit TaxonSet(const std::vector<std::string> &names);
     //! constructor, based on a vector of taxon names
     TaxonSet(const TaxonSet &from);
     //! default constructor
@@ -38,13 +38,15 @@ class TaxonSet {
     //! return taxon name, given the index
     std::string GetTaxon(int index) const { return taxlist[index]; }
     //! return taxon index, given the name
-    int GetTaxonIndex(std::string intaxon) const;
+    int GetTaxonIndex(std::string const &intaxon) const;
     //! return taxon index, given incomplete name (first part)
-    int GetTaxonIndexWithIncompleteName(std::string taxname) const;
+    int GetTaxonIndexWithIncompleteName(std::string const &taxname) const;
     //! formatted output to stream
     void ToStream(std::ostream &os) const;
 
+    //! The taxon given the node
     std::vector<int> get_index_table(const Tree *tree) const;
+    //! The node given the taxon
     std::vector<int> get_reverse_index_table(const Tree *tree) const;
 
   private:
@@ -53,8 +55,8 @@ class TaxonSet {
     std::vector<std::string> taxlist;
 };
 
-inline int TaxonSet::GetTaxonIndex(std::string intaxon) const {
-    std::map<std::string, int>::const_iterator i = taxmap.find(intaxon);
+inline int TaxonSet::GetTaxonIndex(std::string const &intaxon) const {
+    auto i = taxmap.find(intaxon);
     if (i == taxmap.end()) {
         std::cerr << "error in TaxonSet: taxon not found\n";
         exit(1);

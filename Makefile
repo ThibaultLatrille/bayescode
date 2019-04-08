@@ -93,10 +93,6 @@ run-app-tests: all
 	_build/readmutselomega _test/mutselomega_gal4
 	@echo "\n\e[35m\e[1m== Diffsel double sparse ====================================================\e[0m"
 	@make --no-print-directory diffseldsparse
-	@echo "\n\e[35m\e[1m== Dated Branch Omega run ===================================================\e[0m"
-	_build/dated -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/dated_gal4
-	@echo "\n\e[35m\e[1m== Dated Branch Omega restart ===============================================\e[0m"
-	_build/dated _test/dated_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel run =========================================================\e[0m"
 	_build/branchmutsel --ncat 3 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/branchmutsel_gal4
 	@echo "\n\e[35m\e[1m== Dated MutSel restart =====================================================\e[0m"

@@ -3,8 +3,8 @@
 
 using namespace std;
 
-PolyProcess::PolyProcess(CodonStateSpace &instatespace, PolyData &indata,
-    PoissonRandomField &inpoissonrandomfield,
+PolyProcess::PolyProcess(CodonStateSpace const &instatespace, PolyData const &indata,
+    PoissonRandomField const &inpoissonrandomfield,
     MixtureSelector<vector<double>> const &insiteaafitnessarray, GTRSubMatrix const &innucmatrix,
     ScaledMutationRate const &intheta)
     : polydata{indata},
@@ -14,7 +14,7 @@ PolyProcess::PolyProcess(CodonStateSpace &instatespace, PolyData &indata,
       siteaafitnessarray{insiteaafitnessarray},
       theta{intheta} {}
 
-double PolyProcess::GetProb(int taxon, int site, int anc_state) {
+double PolyProcess::GetProb(int taxon, int site, int anc_state) const {
     unsigned sample_size = polydata.GetSampleSize(taxon, site);
     unsigned anc_occurence = polydata.GetCount(taxon, site, anc_state);
 
@@ -36,7 +36,7 @@ double PolyProcess::GetProb(int taxon, int site, int anc_state) {
     return 0.0;
 }
 
-double PolyProcess::GetLogProb(int taxon, int site, int anc_state) {
+double PolyProcess::GetLogProb(int taxon, int site, int anc_state) const {
     double proba = GetProb(taxon, site, anc_state);
     if (proba > 0) {
         return log(proba);
@@ -46,7 +46,7 @@ double PolyProcess::GetLogProb(int taxon, int site, int anc_state) {
 }
 
 tuple<int, int, unsigned, unsigned> PolyProcess::GetDerivedTuple(
-    int taxon, int site, int anc_state) {
+    int taxon, int site, int anc_state) const {
     unsigned sample_size = polydata.GetSampleSize(taxon, site);
     unsigned anc_occurence = polydata.GetCount(taxon, site, anc_state);
 
