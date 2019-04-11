@@ -1,6 +1,6 @@
 #include <cmath>
 #include <fstream>
-#include "DatedMutSelModel.hpp"
+#include "DatedNodeMutSelModel.hpp"
 #include "components/ChainCheckpoint.hpp"
 #include "components/ChainDriver.hpp"
 #include "components/ConsoleLogger.hpp"
@@ -10,9 +10,9 @@
 
 using namespace std;
 
-class DatedMutselArgParse : public BaseArgParse {
+class DatedNodeMutselArgParse : public BaseArgParse {
   public:
-    DatedMutselArgParse(ChainCmdLine &cmd) : BaseArgParse(cmd) {}
+    DatedNodeMutselArgParse(ChainCmdLine &cmd) : BaseArgParse(cmd) {}
 
     ValueArg<int> ncat{
         "", "ncat", "truncation of the first-level stick-breaking process", false, 100, "int", cmd};
@@ -23,7 +23,7 @@ class DatedMutselArgParse : public BaseArgParse {
         false};
     ValueArg<std::string> profiles{
         "c", "profiles", "Preferences profiles (to clamp)", false, "", "string", cmd};
-    SwitchArg clamp_rates{"", "clamp_rates", "Clamp the branch mutation rate", cmd, false};
+    SwitchArg clamp_gen_time{"", "clamp_gen_time", "Clamp the branch mutation rate", cmd, false};
     SwitchArg clamp_pop_sizes{
         "", "clamp_pop_sizes", "Clamp the branch population size", cmd, false};
     SwitchArg clamp_nuc_matrix{"", "clamp_nuc_matrix", "Clamp the nucleotide matrix", cmd, false};
@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
     ChainCmdLine cmd{argc, argv, "DatedMutSel", ' ', "0.1"};
 
     ChainDriver *chain_driver = nullptr;
-    unique_ptr<DatedMutSelModel> model = nullptr;
+    unique_ptr<DatedNodeMutSelModel> model = nullptr;
 
     if (cmd.resume_from_checkpoint()) {
         std::ifstream is = cmd.checkpoint_file();
@@ -60,17 +60,17 @@ int main(int argc, char *argv[]) {
         check_restart(*model, cmd.chain_name() + ".trace");
     } else {
         InferenceAppArgParse args(cmd);
-        DatedMutselArgParse datedmutsel_args(cmd);
+        DatedNodeMutselArgParse datedmutsel_args(cmd);
         cmd.parse();
         datedmutsel_args.check();
         chain_driver =
             new ChainDriver(cmd.chain_name(), args.every.getValue(), args.until.getValue());
-        model = unique_ptr<DatedMutSelModel>(new DatedMutSelModel(args.alignment.getValue(),
+        model = unique_ptr<DatedNodeMutSelModel>(new DatedNodeMutSelModel(args.alignment.getValue(),
             args.treefile.getValue(), datedmutsel_args.profiles.getValue(),
             datedmutsel_args.ncat.getValue(), datedmutsel_args.basencat.getValue(),
             datedmutsel_args.condition_aware.getValue(),
             datedmutsel_args.polymorphism_aware.getValue(), datedmutsel_args.precision.getValue(),
-            datedmutsel_args.debug.getValue(), datedmutsel_args.clamp_rates.getValue(),
+            datedmutsel_args.debug.getValue(), datedmutsel_args.clamp_gen_time.getValue(),
             datedmutsel_args.clamp_pop_sizes.getValue(),
             datedmutsel_args.clamp_nuc_matrix.getValue(),
             datedmutsel_args.clamp_corr_matrix.getValue()));

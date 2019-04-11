@@ -96,7 +96,7 @@ class BranchProductArray : public Array<BranchProduct> {
  * Takes two arguments: a BranchArray l_j and a second BranchArray r_j, and
  * returns, for branch j, the product r_j * l_j.
  *
- * Used in DatedOemgaModel: the branch length (branch j), is
+ * Used in DatedBranchMutSel: the branch length (branch j), is
  * equal to the product of Chronogram and BranchRate (time * rate)
  */
 class BranchwiseProduct : public SimpleBranchArray<double> {
@@ -132,11 +132,39 @@ class BranchwiseProduct : public SimpleBranchArray<double> {
     }
 
     //! branch update (at a specific branch) of the branch array
-    void UpdateBranch(Tree::BranchIndex branch) {
+    virtual void UpdateBranch(Tree::BranchIndex branch) {
         (*this)[branch] = factor1.GetVal(branch) * factor2.GetVal(branch);
     }
 
-  private:
+  protected:
     const BranchSelector<double> &factor1;
     const BranchSelector<double> &factor2;
+};
+
+/**
+ * \brief The product of two BranchSelector<double> and division by the third BranchSelector<double>
+ *
+ * Takes three arguments: a BranchArray l_j, a second BranchArray r_j, a third BranchArray t_j and
+ * returns, for branch j: r_j * l_j / t_j.
+ *
+ * Used in DatedBranchMutSel: the branch length (branch j), is
+ * equal to the product of Chronogram and BranchRate divided by GenerationTime (time *
+ * mutation rate / generation time)
+ */
+class BranchwiseProductDivision : public BranchwiseProduct {
+  public:
+    BranchwiseProductDivision(const BranchSelector<double> &infactor1,
+        const BranchSelector<double> &infactor2, const BranchSelector<double> &infactor3)
+        : BranchwiseProduct(infactor1, infactor2), factor3(infactor3) {
+        assert(factor1.GetNbranch() == factor3.GetNbranch());
+        this->Update();
+    }
+
+    //! branch update (at a specific branch) of the branch array
+    void UpdateBranch(Tree::BranchIndex branch) override {
+        (*this)[branch] = factor1.GetVal(branch) * factor2.GetVal(branch) / factor3.GetVal(branch);
+    }
+
+  private:
+    const BranchSelector<double> &factor3;
 };

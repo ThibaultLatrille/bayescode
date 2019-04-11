@@ -126,11 +126,7 @@ class BranchWiseMultivariateProcess : public SimpleBranchArray<EVector> {
 
 class LeafMultivariateProcess : public SimpleNodeArray<EVector> {
   public:
-    LeafMultivariateProcess(
-        const BranchWiseMultivariateProcess &inbranchwiseprocess, TaxonSet const &taxon);
-
-    //! get log prob for a given taxon
-    double GetTaxonLogProb(int taxon) const;
+    explicit LeafMultivariateProcess(const BranchWiseMultivariateProcess &inbranchwiseprocess);
 
     //! get log prob for a given node
     double GetLogProb(Tree::NodeIndex node) const;
@@ -144,7 +140,6 @@ class LeafMultivariateProcess : public SimpleNodeArray<EVector> {
     double GetLogProb() const;
 
   protected:
-    std::vector<int> reverse_index_table;
     const BranchWiseMultivariateProcess &branchwiseprocess;
 };
 

@@ -10,9 +10,9 @@
 using namespace std;
 using namespace TCLAP;
 
-class ReadDatedMutSelArgParse : public ReadArgParse {
+class ReadBranchMutSelArgParse : public ReadArgParse {
   public:
-    explicit ReadDatedMutSelArgParse(CmdLine &cmd) : ReadArgParse(cmd) {}
+    explicit ReadBranchMutSelArgParse(CmdLine &cmd) : ReadArgParse(cmd) {}
 
     TCLAP::ValueArg<std::string> profiles{"o", "profiles",
         "Output profiles name if desired (otherwise given by {chain_name}.siteprofiles)", false, "", "string", cmd};
@@ -31,7 +31,7 @@ class ReadDatedMutSelArgParse : public ReadArgParse {
 
 int main(int argc, char *argv[]) {
     CmdLine cmd{"DatedMutSel", ' ', "0.1"};
-    ReadDatedMutSelArgParse read_args(cmd);
+    ReadBranchMutSelArgParse read_args(cmd);
     cmd.parse(argc, argv);
 
     std::string chain_name = read_args.GetChainName();

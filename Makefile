@@ -137,13 +137,17 @@ mutselomega: _build
 
 .PHONY: dated
 dated: _build
-	@cd _build ; make --no-print-directory -j8 dated branchmutsel
+	@cd _build ; make --no-print-directory -j8 nodemutsel branchmutsel
 	@rm -rf _dated
 	@mkdir _dated
-	_build/branchmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/mutsel_gal4
-	_build/branchmutsel _dated/mutsel_gal4
-	_build/dated -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 10 _dated/omega_gal4
-	_build/dated _dated/omega_gal4
+	_build/branchmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick --ncat 3 -u ${POINTS} _dated/branch_gal4
+	_build/branchmutsel _dated/branch_gal4
+	_build/branchmutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick --ncat 3 -u ${POINTS} -p _dated/branch_poly_gal4
+	_build/branchmutsel _dated/branch_poly_gal4
+	_build/nodemutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick --ncat 3 -u ${POINTS} _dated/node_gal4
+	_build/nodemutsel _dated/node_gal4
+	_build/nodemutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick --ncat 3 -u ${POINTS} -p _dated/node_poly_gal4
+	_build/nodemutsel _dated/node_poly_gal4
 
 .PHONY: diffseldsparse
 diffseldsparse: all

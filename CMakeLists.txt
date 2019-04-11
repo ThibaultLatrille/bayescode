@@ -66,9 +66,9 @@ set(BASE_LIBS
 add_executable(globom "src/SingleOmega.cpp")
 target_link_libraries(globom ${BASE_LIBS})
 
-# Branch Ne (underlying node Ne) chronogram (datedmutsel)
-add_executable(datedmutsel "src/DatedMutSel.cpp")
-target_link_libraries(datedmutsel bayescode_lib tree_lib)
+# Node Ne mutsel (nodemutsel)
+add_executable(nodemutsel "src/DatedNodeMutSel.cpp")
+target_link_libraries(nodemutsel bayescode_lib tree_lib)
 
 # Branch Ne mutsel (branchmutsel)
 add_executable(branchmutsel "src/DatedBranchMutSel.cpp")
@@ -79,8 +79,8 @@ add_executable(readbranchmutsel "src/ReadDatedBranchMutSel.cpp")
 target_link_libraries(readbranchmutsel bayescode_lib tree_lib)
 
 # Read Branch Ne chronogram (readdatedmutsel)
-add_executable(readdatedmutsel "src/ReadDatedMutSel.cpp")
-target_link_libraries(readdatedmutsel bayescode_lib tree_lib)
+add_executable(readnodemutsel "src/ReadDatedNodeMutSel.cpp")
+target_link_libraries(readnodemutsel bayescode_lib tree_lib)
 
 # Read single omega (readglobom)
 add_executable(readglobom "src/ReadSingleOmega.cpp")

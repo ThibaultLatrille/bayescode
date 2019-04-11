@@ -10,6 +10,7 @@
 #include "PolyProcess.hpp"
 #include "SequenceAlignment.hpp"
 #include "SubMatrix.hpp"
+#include "TaxonMapping.hpp"
 #include "tree/implem.hpp"
 
 // PhyloProcess is a dispatcher:
@@ -152,8 +153,7 @@ class PhyloProcess {
     void GetLeafData(SequenceAlignment *data);
 
     int GetPathState(int taxon, int site) const {
-        Tree::NodeIndex node = reverse_taxon_table[taxon];
-        auto site_leaf_path_map = pathmap[node][site];
+        auto site_leaf_path_map = pathmap[taxon_map.TaxonToNode(taxon)][site];
         return site_leaf_path_map->GetFinalState();
     }
 
@@ -166,6 +166,8 @@ class PhyloProcess {
     //! compute path sufficient statistics across all sites and branches and add
     //! them to suffstatbidimarray (site-heterogeneous taxon-heterogeneous model)
     void AddPolySuffStat(BidimArray<PolySuffStat> &suffstatbidimarray) const;
+
+    TaxonMap const &GetTaxonMap() { return taxon_map; }
 
   private:
     double GetFastLogProb() const;
@@ -202,13 +204,12 @@ class PhyloProcess {
     int GetNstate() const { return Nstate; }
 
     const SequenceAlignment *GetData() const { return data; }
-    int GetData(int taxon, int site) const {
-        if (taxon_table[taxon] == -1) {
-            std::cerr << "error in taxon correspondance table\n";
-            exit(1);
-        }
-        return data->GetState(taxon_table[taxon], site);
+
+    int GetNodeData(int node, int site) const {
+        return GetTaxonData(taxon_map.NodeToTaxon(node), site);
     }
+
+    int GetTaxonData(int taxon, int site) const { return data->GetState(taxon, site); }
 
     const Tree *GetTree() const { return tree; }
     Tree::NodeIndex GetRoot() const { return GetTree()->root(); }
@@ -220,8 +221,8 @@ class PhyloProcess {
     void ClampData() { clampdata = true; }
     void UnclampData() { clampdata = false; }
 
-    bool isDataCompatible(int taxon, int site, int state) const {
-        return GetStateSpace()->isCompatible(GetData(taxon, site), state);
+    bool isDataCompatible(int node, int site, int state) const {
+        return GetStateSpace()->isCompatible(GetNodeData(node, site), state);
     }
 
     void DrawSites(double fraction);  // draw a fraction of sites which will be resampled
@@ -331,8 +332,7 @@ class PhyloProcess {
 
     const Tree *tree;
     const SequenceAlignment *data;
-    std::vector<int> taxon_table;
-    std::vector<int> reverse_taxon_table;
+    TaxonMap taxon_map;
     PolyProcess *polyprocess;
     const BranchSelector<double> *branchlength;
     const Selector<double> *siterate;

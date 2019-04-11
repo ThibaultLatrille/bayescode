@@ -10,9 +10,7 @@ using namespace std;
 PoissonRandomField::PoissonRandomField(
     set<unsigned> const &sample_size_set, CodonStateSpace const &instatespace, unsigned precision)
     : statespace{instatespace}, precision{precision} {
-    unsigned nbr_steps = PowUnsigned(2, precision) + 1;
-    std::cerr << "Number of steps (precision) of PRF: " << nbr_steps << std::endl;
-    grid_s_step = 20.0 / nbr_steps;
+    grid_s_step = 20.0 / (PowUnsigned(2, precision) + 1);
 
     for (unsigned sample_size : sample_size_set) {
         ComputedProb[sample_size] = deque<pair<double, vector<double>>>();

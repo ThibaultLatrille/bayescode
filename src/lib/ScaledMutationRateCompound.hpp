@@ -2,6 +2,7 @@
 
 #include "MultivariateProcess.hpp"
 #include "ScaledMutationRate.hpp"
+#include "TaxonMapping.hpp"
 
 /**
  * \brief A ScaledMutationRate that returns the scaled mutation rate (theta=4*Ne*u) as a compound
@@ -15,10 +16,12 @@ class NodeProcessScaledMutationRate : public ScaledMutationRate {
   public:
     //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
     //! rate (a NodeProcess) and the population size (a NodeProcess).
-    NodeProcessScaledMutationRate(double const &intheta_scale,
-        NodeProcess const *innode_rates, NodeProcess const *innode_popsize, TaxonSet const &taxon);
+    NodeProcessScaledMutationRate(double const &intheta_scale, NodeProcess const *innode_popsize,
+        NodeProcess const *innode_rates, int Ntaxa);
 
     ~NodeProcessScaledMutationRate() override = default;
+
+    void SetTaxonMap(TaxonMap const *intaxon_map) { taxon_map = intaxon_map; }
 
     double GetTheta(int taxon) const override;
 
@@ -28,11 +31,11 @@ class NodeProcessScaledMutationRate : public ScaledMutationRate {
 
   private:
     double const &theta_scale;
-    NodeProcess const *node_rates;
     NodeProcess const *node_popsize;
+    NodeProcess const *node_rates;
     std::vector<double> theta;
 
-    std::vector<Tree::NodeIndex> reverse_index_table;
+    TaxonMap const *taxon_map{nullptr};
 };
 
 class BranchWiseProcessScaledMutationRate : public ScaledMutationRate {
@@ -40,9 +43,11 @@ class BranchWiseProcessScaledMutationRate : public ScaledMutationRate {
     //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
     //! rate (a NodeProcess) and the population size (a NodeProcess).
     BranchWiseProcessScaledMutationRate(double const &intheta_scale,
-        LeafMultivariateProcess &inleaf_multivariate_process, TaxonSet const &taxon);
+        LeafMultivariateProcess &inleaf_multivariate_process, int Ntaxa);
 
     ~BranchWiseProcessScaledMutationRate() override = default;
+
+    void SetTaxonMap(TaxonMap const *intaxon_map) { taxon_map = intaxon_map; }
 
     double GetTheta(int taxon) const override { return theta[taxon]; }
 
@@ -57,5 +62,5 @@ class BranchWiseProcessScaledMutationRate : public ScaledMutationRate {
     LeafMultivariateProcess &leaf_multivariate_process;
     std::vector<double> theta;
 
-    std::vector<Tree::NodeIndex> reverse_index_table;
+    TaxonMap const *taxon_map{nullptr};
 };

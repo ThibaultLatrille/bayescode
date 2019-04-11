@@ -1,6 +1,6 @@
 #include <cmath>
 #include <fstream>
-#include "DatedMutSelModel.hpp"
+#include "DatedNodeMutSelModel.hpp"
 #include "components/ChainDriver.hpp"
 #include "components/ChainReader.hpp"
 #include "components/ReadArgParse.hpp"
@@ -10,9 +10,9 @@
 using namespace std;
 using namespace TCLAP;
 
-class ReadDatedMutSelArgParse : public ReadArgParse {
+class ReadNodeMutSelArgParse : public ReadArgParse {
   public:
-    explicit ReadDatedMutSelArgParse(CmdLine &cmd) : ReadArgParse(cmd) {}
+    explicit ReadNodeMutSelArgParse(CmdLine &cmd) : ReadArgParse(cmd) {}
 
     TCLAP::ValueArg<std::string> profiles{"o", "profiles",
         "Output profiles name if desired (otherwise given by {chain_name}.siteprofiles)", false, "", "string", cmd};
@@ -31,7 +31,7 @@ class ReadDatedMutSelArgParse : public ReadArgParse {
 
 int main(int argc, char *argv[]) {
     CmdLine cmd{"DatedMutSel", ' ', "0.1"};
-    ReadDatedMutSelArgParse read_args(cmd);
+    ReadNodeMutSelArgParse read_args(cmd);
     cmd.parse(argc, argv);
 
     std::string chain_name = read_args.GetChainName();
@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
 
     std::ifstream is{chain_name + ".param"};
     ChainDriver *fake_read = nullptr;
-    unique_ptr<DatedMutSelModel> model = nullptr;
+    unique_ptr<DatedNodeMutSelModel> model = nullptr;
     fake_read = new ChainDriver(is);
     is >> model;
     ChainReader cr(*model, chain_name + ".chain");
@@ -86,6 +86,6 @@ int main(int argc, char *argv[]) {
         cerr << "mean site-specific profiles in " << read_args.GetProfilesName() << "\n";
         cerr << '\n';
     } else {
-        stats_posterior<DatedMutSelModel>(*model, cr, every, size);
+        stats_posterior<DatedNodeMutSelModel>(*model, cr, every, size);
     }
 }

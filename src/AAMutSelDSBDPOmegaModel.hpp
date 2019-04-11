@@ -70,6 +70,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     std::string datafile, treefile;
 
     bool polymorphism_aware;
+    unsigned precision;
 
     std::unique_ptr<Tracer> tracer;
     std::unique_ptr<const Tree> tree;
@@ -216,10 +217,11 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     //! - polymorphism_aware: boolean to force using polymorphism data
     AAMutSelDSBDPOmegaModel(std::string indatafile, std::string intreefile, int inomegamode,
         int inomegaprior, double indposompi, double indposomhypermean, double indposomhyperinvshape,
-        int inNcat, int inbaseNcat, bool polymorphism_aware)
+        int inNcat, int inbaseNcat, bool polymorphism_aware, unsigned precision)
         : datafile(indatafile),
           treefile(intreefile),
           polymorphism_aware(polymorphism_aware),
+          precision(precision),
           baseNcat(inbaseNcat),
           Ncat(inNcat),
           omegaprior(inomegaprior),
@@ -472,8 +474,8 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         theta = new HomogeneousScaledMutationRate(theta_scale);
         thetamax = 0.1;
         if (polydata != nullptr) {
-            poissonrandomfield =
-                new PoissonRandomField(polydata->GetSampleSizeSet(), *GetCodonStateSpace(), 12);
+            poissonrandomfield = new PoissonRandomField(
+                polydata->GetSampleSizeSet(), *GetCodonStateSpace(), precision);
             polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
                 *siteaafitnessarray, *nucmatrix, *theta);
             sitepolysuffstatarray = new PolySuffStatArray(Nsite);
@@ -1542,6 +1544,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         os << dposompi << '\t' << dposomhypermean << '\t' << dposomhyperinvshape << '\t';
         os << Ncat << '\t' << baseNcat << '\t';
         os << polymorphism_aware << '\t';
+        os << precision << '\t';
         tracer->write_line(os);
     }
 
@@ -1557,7 +1560,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         is >> dposompi >> dposomhypermean >> dposomhyperinvshape;
         is >> Ncat >> baseNcat;
         is >> polymorphism_aware;
-
+        is >> precision;
         init();
         tracer->read_line(is);
         Update();

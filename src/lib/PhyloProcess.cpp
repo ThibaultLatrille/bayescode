@@ -8,12 +8,10 @@ using namespace std;
 
 PhyloProcess::PhyloProcess(const Tree *intree, const SequenceAlignment *indata,
     const BranchSelector<double> *inbranchlength, const Selector<double> *insiterate,
-    PolyProcess *inpolyprocess) {
+    PolyProcess *inpolyprocess) : taxon_map(intree, indata) {
     tree = intree;
     data = indata;
     Nstate = data->GetNstate();
-    taxon_table = data->GetTaxonSet()->get_index_table(tree);
-    reverse_taxon_table = data->GetTaxonSet()->get_reverse_index_table(tree);
     maxtrial = DEFAULTMAXTRIAL;
     branchlength = inbranchlength;
     siterate = insiterate;
@@ -140,7 +138,7 @@ void PhyloProcess::BackwardFillMissingMap(Tree::NodeIndex from) {
     for (int i = 0; i < GetNsite(); i++) { missingmap[from][i] = 0; }
     if (tree->is_leaf(from)) {
         for (int i = 0; i < GetNsite(); i++) {
-            int state = GetData(from, i);
+            int state = GetNodeData(from, i);
             if (state != -1) { missingmap[from][i] = 1; }
         }
     } else {
@@ -262,7 +260,7 @@ void PhyloProcess::Pruning(Tree::NodeIndex from, int site) const {
         int totcomp = 0;
         for (int k = 0; k < GetNstate(); k++) {
             if (polyprocess != nullptr) {
-                double prob = polyprocess->GetProb(taxon_table[from], site, k);
+                double prob = polyprocess->GetProb(taxon_map.NodeToTaxon(from), site, k);
                 if (prob > 0.0) {
                     totcomp++;
                     t[k] = prob;
@@ -280,7 +278,7 @@ void PhyloProcess::Pruning(Tree::NodeIndex from, int site) const {
         }
         if (totcomp == 0) {
             cerr << "error : no compatibility\n";
-            cerr << GetData(from, site) << '\n';
+            cerr << GetNodeData(from, site) << '\n';
             exit(1);
         }
 
@@ -486,18 +484,16 @@ void PhyloProcess::PostPredSample(int site, bool rootprior) {
     PriorSample(GetRoot(), site, rootprior);
 }
 
-void PhyloProcess::GetLeafData(SequenceAlignment *data) {
-    for (size_t node = 0; node < tree->nb_nodes(); node++) {
-        if (tree->is_leaf(node)) {
-            int tax = taxon_table[node];
-            for (int site = 0; site < GetNsite(); site++) {
-                int state = statemap[tax][site];
-                int obsstate = GetData(tax, site);
-                if (obsstate != unknown) {
-                    data->SetState(tax, site, state);
-                } else {
-                    data->SetState(tax, site, unknown);
-                }
+void PhyloProcess::GetLeafData(SequenceAlignment *data_ali) {
+    for (int taxon = 0; taxon < GetNtaxa(); taxon++) {
+        int node = taxon_map.TaxonToNode(taxon);
+        for (int site = 0; site < GetNsite(); site++) {
+            int state = statemap[node][site];
+            int obsstate = GetTaxonData(taxon, site);
+            if (obsstate != unknown) {
+                data_ali->SetState(taxon, site, state);
+            } else {
+                data_ali->SetState(taxon, site, unknown);
             }
         }
     }
