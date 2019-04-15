@@ -22,6 +22,7 @@
 #include "ScaledMutationRateCompound.hpp"
 #include "ScatterSuffStat.hpp"
 #include "StickBreakingProcess.hpp"
+#include "TaxonTraits.hpp"
 #include "components/ChainComponent.hpp"
 #include "components/Tracer.hpp"
 
@@ -131,7 +132,7 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
 }
 
 class DatedNodeMutSelModel : public ChainComponent {
-    std::string datafile, treefile, profiles;
+    std::string datafile, treefile, traitsfile, profiles;
 
     bool condition_aware;
     bool polymorphism_aware;
@@ -144,6 +145,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     FileSequenceAlignment *data;
     const TaxonSet *taxonset;
     CodonSequenceAlignment *codondata;
+    TaxonTraits *taxon_traits{nullptr};
     PolyData *polydata{nullptr};
 
     int Nsite;
@@ -156,7 +158,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     // Chronogram (diff between node ages)
     Chronogram *chronogram;
 
-    int dimension;
+    int dimensions;
     int invert_whishart_df;
     double invert_whishart_kappa;
     // Covariance matrix
@@ -276,13 +278,14 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! - baseNcat: truncation of the second-level stick-breaking process (by
     //! default: 1)
     //! - polymorphism_aware: boolean to force using polymorphism data
-    DatedNodeMutSelModel(std::string indatafile, std::string intreefile, std::string inprofiles,
-        int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware,
-        unsigned inprecision, bool indebug, bool inclamp_gen_time, bool inclamp_pop_sizes,
-        bool inclamp_nuc_matrix, bool inclamp_corr_matrix)
-        : datafile(indatafile),
-          treefile(intreefile),
-          profiles(inprofiles),
+    DatedNodeMutSelModel(std::string indatafile, std::string intreefile, std::string intraitsfile,
+        std::string inprofiles, int inNcat, int inbaseNcat, bool incondition_aware,
+        bool inpolymorphism_aware, unsigned inprecision, bool indebug, bool inclamp_gen_time,
+        bool inclamp_pop_sizes, bool inclamp_nuc_matrix, bool inclamp_corr_matrix)
+        : datafile(std::move(indatafile)),
+          treefile(std::move(intreefile)),
+          traitsfile(std::move(intraitsfile)),
+          profiles(std::move(inprofiles)),
           condition_aware(incondition_aware),
           polymorphism_aware(inpolymorphism_aware),
           precision(inprecision),
@@ -320,6 +323,10 @@ class DatedNodeMutSelModel : public ChainComponent {
 
         taxonset = codondata->GetTaxonSet();
 
+        if (!traitsfile.empty() and traitsfile != "Null") {
+            taxon_traits = new TaxonTraits(traitsfile, *taxonset, polymorphism_aware);
+        }
+
         // get tree from file (newick format)
         std::ifstream tree_stream{treefile};
         NHXParser parser{tree_stream};
@@ -332,25 +339,29 @@ class DatedNodeMutSelModel : public ChainComponent {
         // Chronogram (diff between node ages)
         chronogram = new Chronogram(*nodeages);
 
-        dimension = 2;
-        if (polydata != nullptr) { dimension++; }
-        invert_whishart_df = dimension + 1;
+        dimensions = 2;
+        if (polymorphism_aware) {
+            dimensions++;
+            assert(taxon_traits != nullptr);
+        }
+        if (taxon_traits != nullptr) { dimensions += taxon_traits->GetDim(); }
+        invert_whishart_df = dimensions + 1;
         invert_whishart_kappa = 1.0;
-        precision_matrix = EMatrix::Identity(dimension, dimension) * 1.0;
+        precision_matrix = EMatrix::Identity(dimensions, dimensions) * 1.0;
 
-        node_multivariate = new NodeMultivariateProcess(*chronogram, precision_matrix, dimension);
+        node_multivariate = new NodeMultivariateProcess(*chronogram, precision_matrix, dimensions);
 
         // Branch Population size (brownian process)
-        nodepopsize = new NodeProcess(*node_multivariate, 0);
+        nodepopsize = new NodeProcess(*node_multivariate, dim_pop_size);
         branchpopsize = new BranchProcess(*nodepopsize);
 
         // Branch mutation rates (nbr of mutations per generation)
-        nodemutrates = new NodeProcess(*node_multivariate, 1);
+        nodemutrates = new NodeProcess(*node_multivariate, dim_mut_rate);
         branchmutrates = new BranchProcess(*nodemutrates);
 
-        if (polydata != nullptr) {
+        if (polymorphism_aware) {
             // Branch generation rate (nbr of generations per time)
-            nodegentimes = new NodeProcess(*node_multivariate, 2);
+            nodegentimes = new NodeProcess(*node_multivariate, dim_gen_time);
             branchgentimes = new BranchProcess(*nodegentimes);
 
             // Branch lengths (product of chronogram and mutation rate, divided by generation time)
@@ -451,7 +462,7 @@ class DatedNodeMutSelModel : public ChainComponent {
 
         // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
         theta_scale = 1e-5;
-        if (polydata != nullptr) {
+        if (polymorphism_aware) {
             poissonrandomfield = new PoissonRandomField(
                 polydata->GetSampleSizeSet(), *GetCodonStateSpace(), precision);
             polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
@@ -464,8 +475,10 @@ class DatedNodeMutSelModel : public ChainComponent {
             branchsitecodonmatrixarray, rootsitecodonmatrixarray, polyprocess);
         phyloprocess->Unfold();
 
-        if (polyprocess != nullptr) { theta->SetTaxonMap(&phyloprocess->GetTaxonMap()); }
-
+        if (polymorphism_aware) { theta->SetTaxonMap(&phyloprocess->GetTaxonMap()); }
+        if (taxon_traits != nullptr) {
+            node_multivariate->ClampLeaves(*taxon_traits, phyloprocess->GetTaxonMap());
+        }
         branchcomponentpathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Ncat);
         branchsitepathsuffstatbidimarray = new PathSuffStatBidimArray(Nbranch, Nsite);
         rootcomponentpathsuffstatarray = new PathSuffStatArray(Ncat);
@@ -497,13 +510,13 @@ class DatedNodeMutSelModel : public ChainComponent {
         model_node(info, "weight", *weight);
         model_node(info, "componentaafitnessarray", *componentaafitnessarray);
         model_node(info, "sitealloc", *sitealloc);
-        if (polyprocess != nullptr) { model_node(info, "theta_scale", theta_scale); }
+        if (polymorphism_aware) { model_node(info, "theta_scale", theta_scale); }
 
         model_stat(info, "lnPrior", [this]() { return GetLogPrior(); });
         model_stat(info, "lnLikelihood", [this]() { return GetLogLikelihood(); });
         // 3x: per coding site (and not per nucleotide site)
         model_stat(info, "PredictedDNDS", [this]() { return GetPredictedDNDS(); });
-        if (polyprocess != nullptr) {
+        if (polymorphism_aware) {
             model_stat(info, "ThetaScale", theta_scale);
             for (int taxon = 0; taxon < Ntaxa; taxon++) {
                 model_stat(info, "*Theta_" + taxonset->GetTaxon(taxon), (*theta)[taxon]);
@@ -515,7 +528,7 @@ class DatedNodeMutSelModel : public ChainComponent {
             model_stat(info, "basencluster", [this]() { return GetBaseNcluster(); });
             model_stat(info, "basekappa", basekappa);
         }
-        for (int i = 0; i < dimension; i++) {
+        for (int i = 0; i < dimensions; i++) {
             for (int j = 0; j <= i; j++) {
                 model_stat(info, "Precision_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
@@ -525,7 +538,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         model_stat(info, "BranchPopSizeVar", [this]() { return branchpopsize->GetVar(); });
         model_stat(info, "BranchMutRatesMean", [this]() { return branchmutrates->GetMean(); });
         model_stat(info, "BranchMutRatesVar", [this]() { return branchmutrates->GetVar(); });
-        if (polyprocess != nullptr) {
+        if (polymorphism_aware) {
             model_stat(info, "BranchGenTimesMean", [this]() { return branchgentimes->GetMean(); });
             model_stat(info, "BranchGenTimesVar", [this]() { return branchgentimes->GetVar(); });
         }
@@ -536,7 +549,7 @@ class DatedNodeMutSelModel : public ChainComponent {
             string b_name = tree->node_name(tree->node_index(branch));
             model_stat(info, "*BranchPopSize_" + b_name, (*branchpopsize)[branch]);
             model_stat(info, "*BranchMutRate_" + b_name, (*branchmutrates)[branch]);
-            if (polyprocess != nullptr) {
+            if (polymorphism_aware) {
                 model_stat(info, "*BranchGenTime_" + b_name, (*branchgentimes)[branch]);
             }
             model_stat(info, "*BranchdNdS_" + b_name, (*branchdnds)[branch]);
@@ -545,9 +558,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         }
         model_stat(info, "RootPopSize", (*nodepopsize)[tree->root()]);
         model_stat(info, "RootMutRate", (*nodemutrates)[tree->root()]);
-        if (polyprocess != nullptr) {
-            model_stat(info, "RootGenTime", (*nodegentimes)[tree->root()]);
-        }
+        if (polymorphism_aware) { model_stat(info, "RootGenTime", (*nodegentimes)[tree->root()]); }
         model_stat(info, "MeanAAEntropy", [this]() { return GetMeanAAEntropy(); });
         model_stat(info, "MeanComponentAAConcentration",
             [this]() { return GetMeanComponentAAConcentration(); });
@@ -619,7 +630,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         chronogram->Update();
         branchpopsize->Update();
         branchmutrates->Update();
-        if (polyprocess != nullptr) { branchgentimes->Update(); }
+        if (polymorphism_aware) { branchgentimes->Update(); }
         branchlength->Update();
     }
 
@@ -636,7 +647,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! Update needed when the rate (NodeProcess) of the focal node is changed.
     void UpdateLocalBranchRates(Tree::NodeIndex node) {
         branchmutrates->UpdateLocal(node);
-        if (polyprocess != nullptr) { branchgentimes->UpdateLocal(node); }
+        if (polymorphism_aware) { branchgentimes->UpdateLocal(node); }
         branchlength->UpdateLocal(node);
     }
 
@@ -669,7 +680,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     }
 
     void UpdateStats() {
-        if (polyprocess != nullptr) { theta->Update(); }
+        if (polymorphism_aware) { theta->Update(); }
         for (Tree::BranchIndex b = 0; b < Nbranch; b++) { (*branchdnds)[b] = GetPredictedDNDS(b); }
     }
 
@@ -708,7 +719,7 @@ class DatedNodeMutSelModel : public ChainComponent {
             total += AALogPrior();
         }
 
-        if (polyprocess != nullptr) { total += ThetaLogPrior(); }
+        if (polymorphism_aware) { total += ThetaLogPrior(); }
         return total;
     }
 
@@ -806,7 +817,7 @@ class DatedNodeMutSelModel : public ChainComponent {
 
     //! collect sufficient statistics at the tips of the tree
     void CollectSitePolySuffStat() {
-        if (polyprocess != nullptr) {
+        if (polymorphism_aware) {
             taxonsitepolysuffstatbidimarray->Clear();
             phyloprocess->AddPolySuffStat(*taxonsitepolysuffstatbidimarray);
         }
@@ -814,7 +825,7 @@ class DatedNodeMutSelModel : public ChainComponent {
 
     //! gather site-specific tips of the tree sufficient statistics component-wise
     void CollectComponentPolySuffStat() {
-        if (polyprocess != nullptr) {
+        if (polymorphism_aware) {
             taxoncomponentpolysuffstatbidimarray->Clear();
             taxoncomponentpolysuffstatbidimarray->Add(*taxonsitepolysuffstatbidimarray, *sitealloc);
         }
@@ -848,7 +859,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! as a function of the current codon substitution process
     double PolySuffStatLogProb() const {
         //! sum over all components to get log prob
-        if (polyprocess != nullptr) {
+        if (polymorphism_aware) {
             return taxoncomponentpolysuffstatbidimarray->GetLogProb(
                 *poissonrandomfield, *componentaafitnessarray, *nucmatrix, *theta);
         } else {
@@ -860,7 +871,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! mapping, over sites allocated to component k of the mixture
     double ComponentPolySuffStatLogProb(int k) const {
         // sum over all sites allocated to component k
-        if (polyprocess != nullptr) {
+        if (polymorphism_aware) {
             double tot = 0;
             for (int taxon = 0; taxon < Ntaxa; taxon++) {
                 tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
@@ -877,7 +888,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! mapping, over sites allocated to component k of the mixture
     double TaxonPolySuffStatLogProb(int taxon) const {
         // sum over all sites allocated to component k
-        if (polyprocess != nullptr) {
+        if (polymorphism_aware) {
             double tot = 0;
             double d_theta = theta->GetTheta(taxon);
             for (int k = 0; k < Ncat; k++) {
@@ -893,7 +904,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! return log prob only at the tips due to polymorphism of the substitution
     //! mapping, for a given sites if allocated to component cat of the mixture
     double SitePolySuffStatLogProbGivenComponent(int site, int cat) const {
-        if (polyprocess != nullptr) {
+        if (polymorphism_aware) {
             double tot = 0;
             for (int taxon = 0; taxon < Ntaxa; taxon++) {
                 tot += taxonsitepolysuffstatbidimarray->GetVal(taxon, site)
@@ -910,8 +921,11 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! current codon substitution process
     double PathSuffStatLogProb() const {
         return branchcomponentpathsuffstatbidimarray->GetLogProb(*branchcomponentcodonmatrixarray) +
-               rootcomponentpathsuffstatarray->GetLogProb(*rootcomponentcodonmatrixarray) +
-               PolySuffStatLogProb();
+               RootPathSuffStatLogProb() + PolySuffStatLogProb();
+    }
+
+    double RootPathSuffStatLogProb() const {
+        return rootcomponentpathsuffstatarray->GetLogProb(*rootcomponentcodonmatrixarray);
     }
 
     //! return log prob of the substitution mappings, for a given sites if allocated to component
@@ -922,7 +936,7 @@ class DatedNodeMutSelModel : public ChainComponent {
                rootsitepathsuffstatarray->GetVal(site).GetLogProb(
                    rootcomponentcodonmatrixarray->GetVal(cat)) +
                SitePolySuffStatLogProbGivenComponent(site, cat);
-        // TO FIX : Is ComponentPolySuffStatLogProb necessary ?
+        // TO FIX : Is SitePolySuffStatLogProbGivenComponent necessary ?
     }
 
     //! return log prob of the substitution mappings over sites allocated to
@@ -954,7 +968,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! node
     double LocalNodeRateLogProb(Tree::NodeIndex node, bool mut_rate_change) const {
         double tot = LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
-        if (mut_rate_change and polyprocess != nullptr and tree->is_leaf(node)) {
+        if (mut_rate_change and polymorphism_aware and tree->is_leaf(node)) {
             tot += TaxonPolySuffStatLogProb(phyloprocess->GetTaxonMap().NodeToTaxon(node));
         }
         return tot;
@@ -987,7 +1001,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         return LocalNodeMultivariateLogPrior(node) + LocalNodePopSizeSuffStatLogProb(node);
     }
 
-    //! \brief log prob factor (without prior) to be recomputed when moving omega (brownian process)
+    //! \brief log prob factor (without prior) to be recomputed when moving Ne (brownian process)
     //! around of focal node
     double LocalNodePopSizeSuffStatLogProb(Tree::NodeIndex node) const {
         double tot = 0;
@@ -995,11 +1009,14 @@ class DatedNodeMutSelModel : public ChainComponent {
         for (auto const &child : tree->children(node)) {
             tot += NodePopSizeSuffStatLogProb(tree->branch_index(child));
         }
-        if (!tree->is_root(node)) {
+        if (tree->is_root(node)) {
+            // for the root we use the rootpathsuffstat
+            tot += RootPathSuffStatLogProb();
+        } else {
             // for the branch attached to the node
             tot += NodePopSizeSuffStatLogProb(tree->branch_index(node));
         }
-        if (polyprocess != nullptr and tree->is_leaf(node)) {
+        if (polymorphism_aware and tree->is_leaf(node)) {
             tot += TaxonPolySuffStatLogProb(phyloprocess->GetTaxonMap().NodeToTaxon(node));
         }
         return tot;
@@ -1098,12 +1115,14 @@ class DatedNodeMutSelModel : public ChainComponent {
                 MoveNodePopSizes(0.05, 3);
             }
 
+            MoveNodeTraits(0.5, 3);
+            MoveNodeTraits(0.05, 3);
             if (!clamp_corr_matrix) {
                 CollectScatterSuffStat();
                 SamplePrecisionMatrix();
             }
 
-            if (polyprocess != nullptr) { MoveTheta(); }
+            if (polymorphism_aware) { MoveTheta(); }
 
             if (!clamp_profiles) {
                 MoveAAMixture(3);
@@ -1121,7 +1140,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! MH moves on branch ages
     void MoveNodeAges(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
-            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
+            for (Tree::NodeIndex node : tree->LeavesToRootIter()) {
                 if (!tree->is_root(node) and !tree->is_leaf(node)) { MoveNodeAge(node, tuning); }
             }
         }
@@ -1145,14 +1164,48 @@ class DatedNodeMutSelModel : public ChainComponent {
         }
     }
 
+    //! MH moves on traits (brownian process)
+    void MoveNodeTraits(double tuning, int nrep) {
+        if (taxon_traits == nullptr or taxon_traits->GetDim() == 0) { return; }
+        for (int rep = 0; rep < nrep; rep++) {
+            for (int trait_dim = 0; trait_dim < taxon_traits->GetDim(); trait_dim++) {
+                for (Tree::NodeIndex node : tree->LeavesToRootIter()) {
+                    if (tree->is_leaf(node) and
+                        taxon_traits->DataPresence(
+                            phyloprocess->GetTaxonMap().NodeToTaxon(node), trait_dim)) {
+                        continue;
+                    }
+                    MoveNodeTrait(node, tuning, trait_dim);
+                }
+            }
+        }
+    }
+
+    //! MH moves on traits (brownian process) for a focal node
+    void MoveNodeTrait(Tree::NodeIndex node, double tuning, int trait_dim) {
+        int multi_dim = taxon_traits->TraitDimToMultivariateDim(trait_dim);
+        double logratio = -LocalNodeMultivariateLogPrior(node);
+
+        double m = tuning * (Random::Uniform() - 0.5);
+        (*node_multivariate)[node](multi_dim) += m;
+
+        logratio += LocalNodeMultivariateLogPrior(node);
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) { (*node_multivariate)[node](multi_dim) -= m; }
+    }
+
     //! MH moves on branch rates (brownian process)
     void MoveNodeRates(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
-            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
+            for (Tree::NodeIndex node : tree->LeavesToRootIter()) {
                 MoveNodeRate(node, tuning, true);
-                if (polyprocess != nullptr and !clamp_gen_time) {
-                    MoveNodeRate(node, tuning, false);
+                if (polyprocess == nullptr or clamp_gen_time or
+                    (tree->is_leaf(node) and taxon_traits->GenTimePresence(
+                                                 phyloprocess->GetTaxonMap().NodeToTaxon(node)))) {
+                    continue;
                 }
+                MoveNodeRate(node, tuning, false);
             }
         }
     }
@@ -1186,7 +1239,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! MH moves on branch omega (brownian process)
     void MoveNodePopSizes(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
-            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(tree->nb_nodes()); node++) {
+            for (Tree::NodeIndex node : tree->LeavesToRootIter()) {
                 if (!tree->is_root(node)) { MoveNodePopSize(node, tuning); }
             }
         }
@@ -1652,7 +1705,7 @@ class DatedNodeMutSelModel : public ChainComponent {
 };
 
 std::istream &operator>>(std::istream &is, std::unique_ptr<DatedNodeMutSelModel> &m) {
-    std::string model_name, datafile, treefile, profiles;
+    std::string model_name, datafile, treefile, traitsfile, profiles;
     int Ncat, baseNcat;
     bool condition_aware, polymorphism_aware, debug, clamp_gen_time, clamp_pop_sizes,
         clamp_nuc_matrix, clamp_corr_matrix;
@@ -1664,13 +1717,13 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedNodeMutSelModel>
         exit(1);
     }
 
-    is >> datafile >> treefile >> profiles;
+    is >> datafile >> treefile >> traitsfile >> profiles;
     is >> Ncat >> baseNcat;
     is >> condition_aware >> polymorphism_aware >> precision >> debug >> clamp_gen_time >>
         clamp_pop_sizes >> clamp_nuc_matrix >> clamp_corr_matrix;
-    m = std::make_unique<DatedNodeMutSelModel>(datafile, treefile, profiles, Ncat, baseNcat,
-        condition_aware, polymorphism_aware, precision, debug, clamp_gen_time, clamp_pop_sizes,
-        clamp_nuc_matrix, clamp_corr_matrix);
+    m = std::make_unique<DatedNodeMutSelModel>(datafile, treefile, traitsfile, profiles, Ncat,
+        baseNcat, condition_aware, polymorphism_aware, precision, debug, clamp_gen_time,
+        clamp_pop_sizes, clamp_nuc_matrix, clamp_corr_matrix);
     Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
@@ -1682,6 +1735,8 @@ std::ostream &operator<<(std::ostream &os, DatedNodeMutSelModel &m) {
     os << "DatedNodeMutSelModel" << '\t';
     os << m.datafile << '\t';
     os << m.treefile << '\t';
+    if (m.traitsfile.empty()) { m.traitsfile = "Null"; }
+    os << m.traitsfile << '\t';
     if (m.profiles.empty()) { m.profiles = "Null"; }
     os << m.profiles << '\t';
     os << m.Ncat << '\t';

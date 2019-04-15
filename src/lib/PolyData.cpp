@@ -30,10 +30,10 @@ PolyData::PolyData(CodonSequenceAlignment *from_alignment, string const &ali_pat
     // to taxa (leaves of the tree) if the name of the taxon is included
     // in the file name (e.g. *HomoSapiens*.vcf)
 
-    size_t find_last_sep = ali_path.rfind('/');
+    size_t find_last_sep = ali_path.rfind('.');
     string root_dir = "./";
     if (find_last_sep != string::npos) {
-        root_dir = ali_path.substr(0, find_last_sep + 1);
+        root_dir = ali_path.substr(0, find_last_sep);
         cerr << "Searching for files (.vcf) in " << root_dir << endl;
     } else {
         cerr << "Searching for files (.vcf) in the current directory" << endl;

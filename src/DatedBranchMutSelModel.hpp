@@ -156,7 +156,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     // Chronogram (diff between node ages)
     Chronogram *chronogram;
 
-    int dimension;
+    int dimensions;
     int invert_whishart_df;
     double invert_whishart_kappa;
     // Covariance matrix
@@ -271,13 +271,13 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! - baseNcat: truncation of the second-level stick-breaking process (by
     //! default: 1)
     //! - polymorphism_aware: boolean to force using polymorphism data
-    DatedBranchMutSelModel(std::string const &indatafile, std::string const &intreefile,
-        std::string const &inprofiles, int inNcat, int inbaseNcat, bool incondition_aware,
+    DatedBranchMutSelModel(std::string indatafile, std::string intreefile,
+        std::string inprofiles, int inNcat, int inbaseNcat, bool incondition_aware,
         bool inpolymorphism_aware, unsigned inprecision, bool indebug, bool inclamp_gen_time,
         bool inclamp_pop_sizes, bool inclamp_nuc_matrix, bool inclamp_corr_matrix)
-        : datafile(indatafile),
-          treefile(intreefile),
-          profiles(inprofiles),
+        : datafile(std::move(indatafile)),
+          treefile(std::move(intreefile)),
+          profiles(std::move(inprofiles)),
           condition_aware(incondition_aware),
           polymorphism_aware(inpolymorphism_aware),
           precision(inprecision),
@@ -326,24 +326,24 @@ class DatedBranchMutSelModel : public ChainComponent {
         // Chronogram (diff between node ages)
         chronogram = new Chronogram(*nodeages);
 
-        dimension = 2;
-        if (polydata != nullptr) { dimension++; }
-        invert_whishart_df = dimension + 1;
+        dimensions = 2;
+        if (polydata != nullptr) { dimensions++; }
+        invert_whishart_df = dimensions + 1;
         invert_whishart_kappa = 1.0;
-        precision_matrix = EMatrix::Identity(dimension, dimension) * 1.0;
+        precision_matrix = EMatrix::Identity(dimensions, dimensions) * 1.0;
 
         branchwise_multivariate =
-            new BranchWiseMultivariateProcess(*chronogram, precision_matrix, dimension);
+            new BranchWiseMultivariateProcess(*chronogram, precision_matrix, dimensions);
 
         // Branch Population size (brownian process)
-        branchpopsize = new BranchWiseProcess(*branchwise_multivariate, 0);
+        branchpopsize = new BranchWiseProcess(*branchwise_multivariate, dim_pop_size);
 
         // Branch mutation rates (nbr of mutations per generation)
-        branchmutrates = new BranchWiseProcess(*branchwise_multivariate, 1);
+        branchmutrates = new BranchWiseProcess(*branchwise_multivariate, dim_mut_rate);
 
         if (polydata != nullptr) {
             // Branch generation rate (nbr of generations per time)
-            branchgentimes = new BranchWiseProcess(*branchwise_multivariate, 2);
+            branchgentimes = new BranchWiseProcess(*branchwise_multivariate, dim_gen_time);
 
             // Branch lengths (product of chronogram and mutation rate, divided by generation time)
             branchlength =
@@ -511,7 +511,7 @@ class DatedBranchMutSelModel : public ChainComponent {
             model_stat(info, "basencluster", [this]() { return GetBaseNcluster(); });
             model_stat(info, "basekappa", basekappa);
         }
-        for (int i = 0; i < dimension; i++) {
+        for (int i = 0; i < dimensions; i++) {
             for (int j = 0; j <= i; j++) {
                 model_stat(info, "Precision_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
@@ -704,11 +704,13 @@ class DatedBranchMutSelModel : public ChainComponent {
 
     //! log prior over branch rates (brownian process)
     double LocalBranchMultivariateLogPrior(Tree::BranchIndex branch) const {
+        // TO FIX : I should take into account the leaves (leafmultivariate)
         return branchwise_multivariate->GetLocalBranchLogProb(branch);
     }
 
     //! log prior of branch rate (brownian process) around of focal node
     double LocalNodeMultivariateLogPrior(Tree::NodeIndex node) const {
+        // TO FIX : I should take into account the leaves (leafmultivariate)
         return branchwise_multivariate->GetLocalNodeLogProb(node);
     }
 
@@ -1133,7 +1135,7 @@ class DatedBranchMutSelModel : public ChainComponent {
                 } else {
                     if (tree->is_leaf(node) and polyprocess != nullptr) {
                         int taxon = phyloprocess->GetTaxonMap().NodeToTaxon(node);
-                        MoveLeafTheta(tuning, taxon, 1);
+                        MoveLeafTheta(tuning, taxon, dim_mut_rate);
                     }
                     Tree::BranchIndex branch = tree->branch_index(node);
                     MoveBranchRate(branch, tuning, true);
@@ -1229,7 +1231,7 @@ class DatedBranchMutSelModel : public ChainComponent {
     //! MH move on theta
     void MoveLeafPopSizes(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
-            for (int taxon = 0; taxon < Ntaxa; taxon++) { MoveLeafTheta(tuning, taxon, 0); }
+            for (int taxon = 0; taxon < Ntaxa; taxon++) { MoveLeafTheta(tuning, taxon, dim_pop_size); }
         }
     }
 

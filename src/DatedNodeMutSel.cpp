@@ -21,6 +21,8 @@ class DatedNodeMutselArgParse : public BaseArgParse {
     SwitchArg condition_aware{"b", "condition_aware",
         "One Ne per condition, if the tree doesn't have condition, then one Ne per branch", cmd,
         false};
+    ValueArg<std::string> traitsfile{
+        "", "traitsfile", "Traits file for taxon at the leaves", false, "", "string", cmd};
     ValueArg<std::string> profiles{
         "c", "profiles", "Preferences profiles (to clamp)", false, "", "string", cmd};
     SwitchArg clamp_gen_time{"", "clamp_gen_time", "Clamp the branch mutation rate", cmd, false};
@@ -66,7 +68,7 @@ int main(int argc, char *argv[]) {
         chain_driver =
             new ChainDriver(cmd.chain_name(), args.every.getValue(), args.until.getValue());
         model = unique_ptr<DatedNodeMutSelModel>(new DatedNodeMutSelModel(args.alignment.getValue(),
-            args.treefile.getValue(), datedmutsel_args.profiles.getValue(),
+            args.treefile.getValue(), datedmutsel_args.traitsfile.getValue(), datedmutsel_args.profiles.getValue(),
             datedmutsel_args.ncat.getValue(), datedmutsel_args.basencat.getValue(),
             datedmutsel_args.condition_aware.getValue(),
             datedmutsel_args.polymorphism_aware.getValue(), datedmutsel_args.precision.getValue(),

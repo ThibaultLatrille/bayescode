@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cassert>
+#include <queue>
 #include <vector>
 #include "interface.hpp"
 #include "nhx-parser.hpp"
+#include <algorithm>
 
 // a tree with both a vector of parents and a vector of children
 class DoubleVectorTree : public Tree {
@@ -12,6 +14,8 @@ class DoubleVectorTree : public Tree {
     std::vector<std::set<NodeIndex>> children_;
     std::vector<std::string> name_;
     NodeIndex root_{0};
+    std::vector<NodeIndex> breadth_first_iter;
+    std::vector<NodeIndex> breadth_first_inv_iter;
 
   public:
     DoubleVectorTree(const AnnotatedTree& input_tree) {
@@ -21,6 +25,20 @@ class DoubleVectorTree : public Tree {
             children_.emplace_back(input_tree.children(i).begin(), input_tree.children(i).end());
             name_.push_back(input_tree.tag(i, "name"));
         }
+        breadth_first_iter.reserve(nb_nodes());
+        breadth_first_inv_iter.resize(nb_nodes());
+        std::queue<NodeIndex> bfs_queue;
+        bfs_queue.push(root());
+        while (!bfs_queue.empty()) {
+            NodeIndex node = bfs_queue.front();
+            bfs_queue.pop();
+            breadth_first_iter.push_back(node);
+            for (NodeIndex child : children(node)) { bfs_queue.push(child); }
+        }
+        assert(breadth_first_iter.size() == nb_nodes());
+        std::reverse_copy(
+            breadth_first_iter.begin(), breadth_first_iter.end(), breadth_first_inv_iter.begin());
+        assert(breadth_first_inv_iter.size() == nb_nodes());
     }
 
     const std::set<NodeIndex>& children(NodeIndex node) const final { return children_.at(node); }
@@ -33,6 +51,8 @@ class DoubleVectorTree : public Tree {
     int nb_branches() const final { return nb_nodes() - 1; }
     BranchIndex branch_index(NodeIndex i) const final { return i - 1; }
     NodeIndex node_index(BranchIndex i) const final { return i + 1; }
+    const std::vector<NodeIndex>& RootToLeafesIter() const final { return breadth_first_iter; }
+    const std::vector<NodeIndex>& LeavesToRootIter() const final { return breadth_first_inv_iter; }
 };
 
 std::vector<int> taxa_index_from_parser(TreeParser& parser, const std::vector<std::string>& taxa);

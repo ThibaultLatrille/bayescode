@@ -5,6 +5,11 @@
 #include "NodeArray.hpp"
 #include "Random.hpp"
 #include "TaxonSet.hpp"
+#include "TaxonTraits.hpp"
+
+static int dim_pop_size = 0;
+static int dim_mut_rate = 1;
+static int dim_gen_time = 2;
 
 /**
  * \brief A brownian univariate NodeProcess
@@ -23,10 +28,9 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
 
     //! variance of the pro recursively a node from prior
     double GetSigma(int dimension) const;
-    ;
 
     //! dimension
-    int GetDimensions() const { return dimensions; };
+    int GetDimensions() const { return dimensions; }
 
     //! get log prob for a given node
     double GetLogProb(Tree::NodeIndex node) const;
@@ -40,6 +44,36 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
     //! get global log prob for all nodes
     double GetLogProb() const;
 
+    void ClampLeaves(TaxonTraits const &taxon_traits, TaxonMap const &taxon_map) {
+        for (int taxon{0}; taxon < taxon_map.GetNtaxa(); taxon++) {
+            Tree::NodeIndex node = taxon_map.TaxonToNode(taxon);
+            if (taxon_traits.GenTimePresence() and taxon_traits.GenTimePresence(taxon)) {
+                (*this)[node](dim_gen_time) = taxon_traits.GenTime(taxon);
+            }
+            for (int trait_dim = 0; trait_dim < taxon_traits.GetDim(); trait_dim++) {
+                int dim = taxon_traits.TraitDimToMultivariateDim(trait_dim);
+                if (taxon_traits.DataPresence(taxon, trait_dim)) {
+                    (*this)[node](dim) = taxon_traits.Data(taxon, trait_dim);
+                }
+            }
+        }
+        for (Tree::NodeIndex node : GetTree().LeavesToRootIter()) {
+            if (!GetTree().is_leaf(node)) {
+                for (int trait_dim = 0; trait_dim < taxon_traits.GetDim(); trait_dim++) {
+                    int dim = taxon_traits.TraitDimToMultivariateDim(trait_dim);
+                    double sum_children = 0;
+                    double sum_branch = 0;
+                    for (Tree::NodeIndex child : GetTree().children(node)) {
+                        double branch = chronogram.GetVal(tree.branch_index(node));
+                        sum_children += (*this)[child](dim) * branch;
+                        sum_branch += branch;
+                    }
+                    (*this)[node](dim) = sum_children / sum_branch;
+                }
+            }
+        }
+    }
+
   protected:
     const Chronogram &chronogram;
     int dimensions;
@@ -52,7 +86,6 @@ class NodeProcess {
 
     //! variance of the pro recursively a node from prior
     double GetSigma() const;
-    ;
 
     const Tree &GetTree() const;
 
