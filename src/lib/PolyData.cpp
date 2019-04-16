@@ -166,23 +166,30 @@ PolyData::PolyData(CodonSequenceAlignment *from_alignment, string const &ali_pat
                 // nucleotide
                 if (not alt_codon.empty()) {
                     assert(alt_codon[nuc_site % 3] == alt_nuc);
-                    assert(alt_codon[(nuc_site + 1) % 3] == ref_codon[(nuc_site + 1) % 3]);
-                    assert(alt_codon[(nuc_site + 2) % 3] == ref_codon[(nuc_site + 2) % 3]);
+                    if ((alt_codon[(nuc_site + 1) % 3] != ref_codon[(nuc_site + 1) % 3]) or
+                        (alt_codon[(nuc_site + 2) % 3] != ref_codon[(nuc_site + 2) % 3])) {
+                        cerr << "Double mutation observed at site " << site << " for taxon "
+                             << Alignment->GetTaxonSet()->GetTaxon(taxon) << "." << endl;
+                        alt_codon[(nuc_site + 1) % 3] = ref_codon[(nuc_site + 1) % 3];
+                        alt_codon[(nuc_site + 2) % 3] = ref_codon[(nuc_site + 2) % 3];
+                    }
                 }
                 alt_codon[nuc_site % 3] = alt_nuc;
 
                 int alt_state = Alignment->GetCodonStateSpace()->GetState(alt_codon);
                 // Assert the alternate codon is in the genetic code (and also not a stop codon)
-                assert(alt_state >= 0);
-                assert(alt_state < Alignment->GetCodonStateSpace()->GetNstate());
+                if (alt_state < 0 or alt_state >= Alignment->GetCodonStateSpace()->GetNstate()) {
+                    cerr << "The mutation lead to a stop codon at site " << site << " for taxon "
+                         << Alignment->GetTaxonSet()->GetTaxon(taxon) << "." << endl;
+                    continue;
+                }
 
                 codon_state_to_count[ref_state] = ref_count;
                 codon_state_to_count[alt_state] = alt_count;
 
                 if (Data.count(taxon) == 1 and Data.at(taxon).count(site) == 1) {
-                    cerr << "There is already a SNP at nuc_site" << site << " for taxon " << taxon
-                         << endl;
-                    exit(1);
+                    cerr << "There is already a SNP at site " << site << " for taxon "
+                         << Alignment->GetTaxonSet()->GetTaxon(taxon) << "." << endl;
                 } else {
                     if (alt_count == sample_size) {
                         Alignment->SetState(taxon, site, alt_state);
