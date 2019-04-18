@@ -92,8 +92,6 @@ class NodeProcess {
     double GetVal(Tree::NodeIndex node) const;
     double &operator[](Tree::NodeIndex node);
 
-    double GetExpVal(Tree::NodeIndex node) const;
-
     void SlidingMove(Tree::NodeIndex node, double m);
 
     void SlidingMove(double m);
@@ -114,7 +112,7 @@ class NodeProcess {
 class BranchProcess : public SimpleBranchArray<double> {
   public:
     //! Constructor (with only the tree given as argument)
-    explicit BranchProcess(const NodeProcess &innodeprocess);
+    explicit BranchProcess(const NodeProcess &innodeprocess, bool geodesic = false);
 
     //! global update of the branch array
     void Update();
@@ -127,6 +125,7 @@ class BranchProcess : public SimpleBranchArray<double> {
     void UpdateBranch(Tree::NodeIndex parent, Tree::NodeIndex node);
 
     const NodeProcess &nodeprocess;
+    bool geodesic;
 };
 
 class BranchWiseMultivariateProcess : public SimpleBranchArray<EVector> {

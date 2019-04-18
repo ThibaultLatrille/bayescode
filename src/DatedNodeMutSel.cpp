@@ -34,7 +34,7 @@ class DatedNodeMutselArgParse : public BaseArgParse {
     SwitchArg polymorphism_aware{"p", "polymorphism_aware", "Use polymorphic data", cmd, false};
     ValueArg<unsigned> precision{
         "", "precision", "The precision of PRF computation", false, 6, "unsigned", cmd};
-    SwitchArg debug{"d", "debug", "Debug mode (slower)", cmd, false};
+    SwitchArg geodesic{"d", "geodesic", "Use geodesic mean instead of arithmetic", cmd, false};
 
     void check() {
         if (condition_aware.getValue()) {
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
             datedmutsel_args.ncat.getValue(), datedmutsel_args.basencat.getValue(),
             datedmutsel_args.condition_aware.getValue(),
             datedmutsel_args.polymorphism_aware.getValue(), datedmutsel_args.precision.getValue(),
-            datedmutsel_args.debug.getValue(), datedmutsel_args.clamp_gen_time.getValue(),
+            datedmutsel_args.geodesic.getValue(), datedmutsel_args.clamp_gen_time.getValue(),
             datedmutsel_args.clamp_pop_sizes.getValue(),
             datedmutsel_args.clamp_nuc_matrix.getValue(),
             datedmutsel_args.clamp_corr_matrix.getValue()));

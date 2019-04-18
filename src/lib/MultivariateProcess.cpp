@@ -59,8 +59,6 @@ double NodeProcess::GetVal(Tree::NodeIndex node) const {
 
 double &NodeProcess::operator[](Tree::NodeIndex node) { return node_multivariate[node](dimension); }
 
-double NodeProcess::GetExpVal(Tree::NodeIndex node) const { return exp(GetVal(node)); }
-
 void NodeProcess::SlidingMove(Tree::NodeIndex node, double m) {
     node_multivariate[node](dimension) += m;
 }
@@ -71,8 +69,10 @@ void NodeProcess::SlidingMove(double m) {
     }
 }
 
-BranchProcess::BranchProcess(const NodeProcess &innodeprocess)
-    : SimpleBranchArray<double>(innodeprocess.GetTree()), nodeprocess{innodeprocess} {
+BranchProcess::BranchProcess(const NodeProcess &innodeprocess, bool geodesic)
+    : SimpleBranchArray<double>(innodeprocess.GetTree()),
+      nodeprocess{innodeprocess},
+      geodesic{geodesic} {
     Update();
 }
 
@@ -95,11 +95,18 @@ void BranchProcess::UpdateLocal(Tree::NodeIndex node) {
 }
 
 void BranchProcess::UpdateBranch(Tree::NodeIndex parent, Tree::NodeIndex node) {
-    (*this)[this->GetTree().branch_index(node)] =
-        (nodeprocess.GetExpVal(parent) + nodeprocess.GetExpVal(node)) / 2;
-    // For geodesic, use :
-    // = (nodeprocess.GetExpVal(parent) - nodeprocess.GetExpVal(node)) /
-    // (nodeprocess->GetVal(parent) - nodeprocess->GetVal(node));
+    double xup = nodeprocess.GetVal(parent);
+    double x = nodeprocess.GetVal(node);
+    if (geodesic) {
+        if (abs(x - xup) < 1e-12) {
+            (*this)[this->GetTree().branch_index(node)] = exp(x);
+        } else {
+            (*this)[this->GetTree().branch_index(node)] = (exp(xup) - exp(x)) / (xup - x);
+        }
+        assert((*this)[this->GetTree().branch_index(node)] >= 0.0);
+    } else {
+        (*this)[this->GetTree().branch_index(node)] = (exp(xup) + exp(x)) / 2;
+    }
 }
 
 BranchWiseMultivariateProcess::BranchWiseMultivariateProcess(
