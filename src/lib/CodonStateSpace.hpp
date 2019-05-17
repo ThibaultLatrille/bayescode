@@ -62,6 +62,7 @@ class CodonStateSpace : public StateSpace {
     //! otherwise, returns the position at which codons differ (i.e. returns 0,1
     //! or 2 if the codons differ at position 1,2 or 3).
     int GetDifferingPosition(int i, int j) const;
+    int ComputeDifferingPosition(int i, int j) const;
 
     //! \brief return the vector of codons differing at exactly one position
     std::vector<int> GetNeighbors(int i) const;
@@ -69,17 +70,9 @@ class CodonStateSpace : public StateSpace {
     //! return the integer encoding for the nucleotide at requested position
     //! pos=0,1, or 2
     int GetCodonPosition(int pos, int codon) const {
-        if ((pos < 0) || (pos >= Npos)) {
-            std::cerr << "GetCodonPosition: pos out of bound\n";
-            std::cerr << pos << '\n';
-            exit(1);
-        }
+        assert((pos >= 0) and (pos < Npos));
+        assert((codon >= 0) and (codon < Nstate));
         if (codon == -1) { return -1; }
-        if ((codon < 0) || (codon >= Nstate)) {
-            std::cerr << "GetCodonPosition: codon out of bound\n";
-            std::cerr << codon << '\n';
-            exit(1);
-        }
         return CodonPos[pos][codon];
     }
 
@@ -145,4 +138,5 @@ class CodonStateSpace : public StateSpace {
 
     mutable std::map<int, int> degeneracy;
     std::vector<std::vector<int>> neighbors_vector;
+    int **differing_pos;
 };

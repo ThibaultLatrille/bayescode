@@ -25,6 +25,8 @@ class NodeProcessScaledMutationRate : public ScaledMutationRate {
 
     double GetTheta(int taxon) const override;
 
+    double GetNodeTheta(Tree::NodeIndex node) const;
+
     double &operator[](int taxon) { return theta[taxon]; }
 
     void Update();
@@ -33,33 +35,6 @@ class NodeProcessScaledMutationRate : public ScaledMutationRate {
     double const &theta_scale;
     NodeProcess const *node_popsize;
     NodeProcess const *node_rates;
-    std::vector<double> theta;
-
-    TaxonMap const *taxon_map{nullptr};
-};
-
-class BranchWiseProcessScaledMutationRate : public ScaledMutationRate {
-  public:
-    //! \brief Constructor, taking as arguments the Nbr of taxa, the scaling factor, the mutation
-    //! rate (a NodeProcess) and the population size (a NodeProcess).
-    BranchWiseProcessScaledMutationRate(double const &intheta_scale,
-        LeafMultivariateProcess &inleaf_multivariate_process, int Ntaxa);
-
-    ~BranchWiseProcessScaledMutationRate() override = default;
-
-    void SetTaxonMap(TaxonMap const *intaxon_map) { taxon_map = intaxon_map; }
-
-    double GetTheta(int taxon) const override { return theta[taxon]; }
-
-    double &operator[](int taxon) { return theta[taxon]; }
-
-    void SlidingTaxonMove(int taxon, int dimension, double m);
-
-    void Update();
-
-  private:
-    double const &theta_scale;
-    LeafMultivariateProcess &leaf_multivariate_process;
     std::vector<double> theta;
 
     TaxonMap const *taxon_map{nullptr};

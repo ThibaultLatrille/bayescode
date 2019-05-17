@@ -1,11 +1,11 @@
 #pragma once
 #include <functional>
 #include <iostream>
+#include "Eigen/Dense"
 #include "model_decl_utils.hpp"
 #include "mpi_components/partition.hpp"
 #include "tags/decl_utils.hpp"
 #include "traits.hpp"
-#include "Eigen/Dense"
 
 class Tracer {
     std::vector<std::function<void(std::ostream&)>> header_to_stream;

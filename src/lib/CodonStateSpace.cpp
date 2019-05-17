@@ -113,13 +113,17 @@ CodonStateSpace::CodonStateSpace(GeneticCodeType type) {
         exit(1);
     }
 
+    differing_pos = new int *[Nstate];
     neighbors_vector.resize(Nstate);
     for (int from{0}; from < Nstate; from++) {
+        differing_pos[from] = new int[Nstate];
         for (int to{0}; to < Nstate; to++) {
-            if (to != from and GetDifferingPosition(from, to) != 3) {
-                neighbors_vector[from].push_back(to);
-            }
+            int pos = ComputeDifferingPosition(from, to);
+            differing_pos[from][to] = pos;
+            if ((pos > -1) && (pos < 3)) { neighbors_vector[from].push_back(to); }
         }
+        assert(!neighbors_vector.empty());
+        assert(neighbors_vector[from].size() <= 9);
     }
 }
 
@@ -194,7 +198,9 @@ int CodonStateSpace::GetCodonFromDNA(int pos1, int pos2, int pos3) const {
     return l;
 }
 
-int CodonStateSpace::GetDifferingPosition(int i, int j) const {
+int CodonStateSpace::GetDifferingPosition(int i, int j) const { return differing_pos[i][j]; }
+
+int CodonStateSpace::ComputeDifferingPosition(int i, int j) const {
     // identical
     if ((GetCodonPosition(0, i) == GetCodonPosition(0, j)) &&
         (GetCodonPosition(1, i) == GetCodonPosition(1, j)) &&

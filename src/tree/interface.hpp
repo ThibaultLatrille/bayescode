@@ -22,7 +22,7 @@ class Tree {
     virtual int nb_branches() const = 0;
     virtual BranchIndex branch_index(NodeIndex) const = 0;
     virtual NodeIndex node_index(BranchIndex) const = 0;
-    virtual const std::vector<NodeIndex>& RootToLeafesIter() const = 0;
+    virtual const std::vector<NodeIndex>& RootToLeavesIter() const = 0;
     virtual const std::vector<NodeIndex>& LeavesToRootIter() const = 0;
 
     virtual ~Tree() = default;

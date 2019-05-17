@@ -51,7 +51,7 @@ class DoubleVectorTree : public Tree {
     int nb_branches() const final { return nb_nodes() - 1; }
     BranchIndex branch_index(NodeIndex i) const final { return i - 1; }
     NodeIndex node_index(BranchIndex i) const final { return i + 1; }
-    const std::vector<NodeIndex>& RootToLeafesIter() const final { return breadth_first_iter; }
+    const std::vector<NodeIndex>& RootToLeavesIter() const final { return breadth_first_iter; }
     const std::vector<NodeIndex>& LeavesToRootIter() const final { return breadth_first_inv_iter; }
 };
 

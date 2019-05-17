@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CodonSubMatrix.hpp"
+#include <cassert>
 
 /**
  * \brief A mutation-selection codon substitution process.
@@ -28,34 +29,51 @@ class AAMutSelOmegaCodonSubMatrix : public virtual NucCodonSubMatrix,
           CodonSubMatrix(instatespace, innormalise),
           NucCodonSubMatrix(instatespace, inNucMatrix, innormalise),
           OmegaCodonSubMatrix(instatespace, inomega, innormalise),
+          fitnesses(inaa.size(), 0.0),
+          logfitnesses(inaa.size(), 1.0 / inaa.size()),
           aa(inaa),
           Ne(inNe) {}
 
-    //! const access (by reference) to amino-acid fitness vector
-    const std::vector<double> &GetAAFitnessProfile() const { return aa; }
-
     //! \brief access by copy to fitness of a given amino-acid
     //!
-    //! Note: to avoid numerical errors, this function returns aa[a] + 1e-8.
-    double GetFitness(int a) const { return exp(Ne * log(aa[a])) + 1e-8; }
-    double GetLogFitness(int a) const { return log(GetFitness(a)); }
+    //! Note: to avoid numerical errors, this function adds 1e-8.
+    double GetFitness(int a) const {
+        assert(std::abs((exp(Ne * log(aa[a])) + 1e-8) - fitnesses[a]) < 1e-6);
+        return fitnesses[a];
+    }
+
+    double GetLogFitness(int a) const {
+        assert(std::abs(log(GetFitness(a)) - logfitnesses[a]) < 1e-6);
+        return logfitnesses[a];
+    }
 
     std::tuple<double, double> GetFlowDNDS() const;
     double GetPredictedDNDS() const;
 
-    void SetNe(double inNe) {
+    void UpdateNe(double inNe) {
         Ne = inNe;
         CorruptMatrix();
     }
 
-  protected:
+    void CorruptMatrixNoFitnessRecomput() { SubMatrix::CorruptMatrix(); }
 
+    void CorruptMatrix() override {
+        for (size_t a{0}; a < aa.size(); a++) {
+            fitnesses[a] = exp(Ne * log(aa[a])) + 1e-8;
+            logfitnesses[a] = log(fitnesses[a]);
+        }
+        SubMatrix::CorruptMatrix();
+    }
+
+  protected:
     void ComputeArray(int i) const override;
     void ComputeStationary() const override;
 
+    // fitness precomputation
+    std::vector<double> fitnesses;
+    std::vector<double> logfitnesses;
 
     // data members
-
     const std::vector<double> &aa;
     double Ne;
 };

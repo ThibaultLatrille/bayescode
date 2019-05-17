@@ -543,7 +543,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     //! set omega to new value (multi-gene analyses)
     void SetOmega(double inomega) {
         omega = inomega;
-        UpdateCodonMatrices();
+        UpdateCodonMatricesNoFitnessRecomput();
     }
 
     //! set omega hyperparams to new value (multi-gene analyses)
@@ -574,7 +574,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         const std::vector<double> &innucrelrate, const std::vector<double> &innucstat) {
         nucrelrate = innucrelrate;
         nucstat = innucstat;
-        UpdateMatrices();
+        UpdateMatricesNoFitnessRecomput();
     }
 
     //! copy nucleotide rates into vectors given as arguments (multi-gene
@@ -609,6 +609,13 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         componentcodonmatrixarray->UpdateCodonMatrices();
     }
 
+    //! \brief tell the codon matrices that their parameters have changed and that
+    //! they should be updated
+    void UpdateCodonMatricesNoFitnessRecomput() {
+        componentcodonmatrixarray->SetOmega(omega);
+        componentcodonmatrixarray->UpdateCodonMatrices(false);
+    }
+
     //! \brief tell codon matrix k that its parameters have changed and that it
     //! should be updated
     void UpdateCodonMatrix(int k) { (*componentcodonmatrixarray)[k].CorruptMatrix(); }
@@ -618,6 +625,13 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     void UpdateMatrices() {
         UpdateNucMatrix();
         UpdateCodonMatrices();
+    }
+
+    //! \brief tell the nucleotide and the codon matrices that their parameters
+    //! have changed and that it should be updated
+    void UpdateMatricesNoFitnessRecomput() {
+        UpdateNucMatrix();
+        UpdateCodonMatricesNoFitnessRecomput();
     }
 
     //! \brief dummy function that does not do anything.
@@ -804,7 +818,6 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     double PathSuffStatLogProb() const {
         return componentpathsuffstatarray->GetLogProb(*componentcodonmatrixarray) +
                PolySuffStatLogProb();
-        ;
     }
 
     //! return log prob of the substitution mappings over sites allocated to
@@ -813,7 +826,6 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         return componentpathsuffstatarray->GetVal(k).GetLogProb(
                    componentcodonmatrixarray->GetVal(k)) +
                ComponentPolySuffStatLogProb(k);
-        ;
     }
 
     //! return log prob of first-level mixture components (i.e. all amino-acid
@@ -823,7 +835,6 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         return basesuffstatarray->GetVal(k).GetLogProb(
                    basecenterarray->GetVal(k), 1.0 / baseconcentrationarray->GetVal(k)) +
                ComponentPolySuffStatLogProb(k);
-        ;
     }
 
     //-------------------
@@ -984,7 +995,7 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         } else {
             MultipleTryMoveOmega(100);
         }
-        UpdateCodonMatrices();
+        UpdateCodonMatricesNoFitnessRecomput();
     }
 
     void GibbsResampleOmega() {
@@ -1099,16 +1110,16 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     //! MH move on nucleotide rate parameters
     void MoveNucRates() {
         Move::Profile(nucrelrate, 0.1, 1, 3, &AAMutSelDSBDPOmegaModel::NucRatesLogProb,
-            &AAMutSelDSBDPOmegaModel::UpdateMatrices, this);
+            &AAMutSelDSBDPOmegaModel::UpdateMatricesNoFitnessRecomput, this);
         Move::Profile(nucrelrate, 0.03, 3, 3, &AAMutSelDSBDPOmegaModel::NucRatesLogProb,
-            &AAMutSelDSBDPOmegaModel::UpdateMatrices, this);
+            &AAMutSelDSBDPOmegaModel::UpdateMatricesNoFitnessRecomput, this);
         Move::Profile(nucrelrate, 0.01, 3, 3, &AAMutSelDSBDPOmegaModel::NucRatesLogProb,
-            &AAMutSelDSBDPOmegaModel::UpdateMatrices, this);
+            &AAMutSelDSBDPOmegaModel::UpdateMatricesNoFitnessRecomput, this);
 
         Move::Profile(nucstat, 0.1, 1, 3, &AAMutSelDSBDPOmegaModel::NucRatesLogProb,
-            &AAMutSelDSBDPOmegaModel::UpdateMatrices, this);
+            &AAMutSelDSBDPOmegaModel::UpdateMatricesNoFitnessRecomput, this);
         Move::Profile(nucstat, 0.01, 1, 3, &AAMutSelDSBDPOmegaModel::NucRatesLogProb,
-            &AAMutSelDSBDPOmegaModel::UpdateMatrices, this);
+            &AAMutSelDSBDPOmegaModel::UpdateMatricesNoFitnessRecomput, this);
     }
 
     //! MCMC module for the mixture amino-acid fitness profiles

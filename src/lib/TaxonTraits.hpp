@@ -84,7 +84,13 @@ class TaxonTraits {
     }
 
     int GetDim() const { return dimensions; }
-    int TraitDimToMultivariateDim(int dim) const { return 2 + dim + gentime; }
+
+    int TraitDimToMultivariateDim(int trait_dim) const { return 2 + gentime + trait_dim ; }
+    int MultivariateDimToTraitDim(int multi_dim) const { return multi_dim - 2 - gentime; }
+
+    string GetHeader(int multi_dim) {
+        return header.at(MultivariateDimToTraitDim(multi_dim));
+    }
 
     bool DataPresence(int taxon, int dim) const {
         if (taxon_presence[taxon]) {

@@ -13,9 +13,19 @@ using namespace TCLAP;
 class ReadAAMutSelDSBDPOmegaArgParse : public ReadArgParse {
   public:
     explicit ReadAAMutSelDSBDPOmegaArgParse(CmdLine &cmd) : ReadArgParse(cmd) {}
-
+    TCLAP::ValueArg<string> profiles{"o", "profiles",
+                                     "Output profiles name if desired (otherwise given by {chain_name}.siteprofiles)", false, "",
+                                     "string", cmd};
     SwitchArg ss{
         "s", "ss", "Computes the mean posterior site-specific state equilibrium frequencies", cmd};
+
+    string GetProfilesName() {
+        if (profiles.getValue().empty()) {
+            return GetChainName() + ".siteprofiles";
+        } else {
+            return profiles.getValue();
+        }
+    }
 };
 
 int main(int argc, char *argv[]) {
@@ -59,7 +69,7 @@ int main(int argc, char *argv[]) {
         }
         cerr << '\n';
 
-        ofstream os((chain_name + ".siteprofiles").c_str());
+        ofstream os(read_args.GetProfilesName().c_str());
         os << model.GetNsite() << '\n';
         for (int i = 0; i < model.GetNsite(); i++) {
             os << i + 1;
@@ -69,7 +79,7 @@ int main(int argc, char *argv[]) {
             }
             os << '\n';
         }
-        cerr << "mean site-specific profiles in " << chain_name << ".siteprofiles\n";
+        cerr << "mean site-specific profiles in " << read_args.GetProfilesName() << "\n";
         cerr << '\n';
     } else {
         stats_posterior<AAMutSelDSBDPOmegaModel>(model, cr, every, size);

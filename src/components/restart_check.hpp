@@ -37,7 +37,6 @@ bool check_restart(Model& model, std::string tracefile) {
         while (std::getline(loaded, each, '\t')) { loaded_vector.push_back(each); };
 
         assert(header_vector.size() == restarted_vector.size());
-        assert(loaded_vector.size() == restarted_vector.size());
 
         // Remove "\n" at the beginning of restarted trace
         restarted_vector[0].erase(0, 1);

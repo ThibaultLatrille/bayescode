@@ -8,32 +8,14 @@ NodeProcessScaledMutationRate::NodeProcessScaledMutationRate(double const &inthe
 }
 
 double NodeProcessScaledMutationRate::GetTheta(int taxon) const {
-    Tree::NodeIndex node = taxon_map->TaxonToNode(taxon);
+    return GetNodeTheta(taxon_map->TaxonToNode(taxon));
+}
+
+double NodeProcessScaledMutationRate::GetNodeTheta(Tree::NodeIndex node) const {
     assert(node_rates->GetTree().is_leaf(node));
-    return theta_scale * exp(node_rates->GetVal(node)) * exp(node_popsize->GetVal(node));
+    return theta_scale * exp(node_rates->GetVal(node) + node_popsize->GetVal(node));
 }
 
 void NodeProcessScaledMutationRate::Update() {
     for (size_t taxon = 0; taxon < theta.size(); taxon++) { theta[taxon] = GetTheta(taxon); }
-}
-
-BranchWiseProcessScaledMutationRate::BranchWiseProcessScaledMutationRate(
-    double const &intheta_scale, LeafMultivariateProcess &inleaf_multivariate_process, int Ntaxa)
-    : theta_scale{intheta_scale}, leaf_multivariate_process{inleaf_multivariate_process} {
-    theta.resize(Ntaxa);
-}
-
-void BranchWiseProcessScaledMutationRate::SlidingTaxonMove(int taxon, int dimension, double m) {
-    Tree::NodeIndex node = taxon_map->TaxonToNode(taxon);
-    assert(leaf_multivariate_process.GetTree().is_leaf(node));
-    leaf_multivariate_process[node](dimension) += m;
-    theta[taxon] = theta_scale * leaf_multivariate_process.GetTheta(node);
-}
-
-
-void BranchWiseProcessScaledMutationRate::Update() {
-    for (size_t taxon = 0; taxon < theta.size(); taxon++) {
-        theta[taxon] =
-            theta_scale * leaf_multivariate_process.GetTheta(taxon_map->TaxonToNode(taxon));
-    }
 }

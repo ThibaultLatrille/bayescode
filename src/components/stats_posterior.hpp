@@ -34,6 +34,7 @@ void stats_posterior(Model &model, ChainReader &cr, int const &every, int const 
         std::cerr << '.';
         cr.skip(every);
         Tracer tracer(model, processing::HasTag<Stat>());
+        model.Update();
         std::vector<double> line_values = tracer.line_values();
         for (unsigned field{0}; field < nbr_header_fields; field++) {
             bidim_stats.at(field).at(step) = line_values.at(field);

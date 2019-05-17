@@ -175,11 +175,10 @@ vector<double> PoissonRandomField::ExpectedTimeObsVector(unsigned n, double s) c
 }
 
 
-template <class T>
-string join(vector<T> const &v, char sep) {
-    return accumulate(v.begin() + 1, v.end(), to_string(v[0]),
-        [sep](const string &acc, T b) { return acc + sep + to_string(b); });
-};
+std::string join(std::vector<std::string> const &v, char sep) {
+    return std::accumulate(v.begin() + 1, v.end(), v[0],
+                           [sep](const std::string &acc, std::string b) { return acc + sep + b; });
+}
 
 vector<unsigned long long> BinomialCoefficientArray(unsigned n) {
     vector<unsigned long long> bin_array(n + 1, 1);

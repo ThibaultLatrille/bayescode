@@ -26,39 +26,31 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
 
     //! return the number of rows (number of branches)
     int GetNrow() const override { return matrixbidimarray.size(); }
-    //! return the number of columns (number of sites)
-    int GetNcol() const override { return aafitnessarray->GetSize(); }
+    //! return the number of columns (number of cat)
+    int GetNcol() const override { return matrixbidimarray.begin()->size(); }
 
-    //! const access to the matrix for row (branch) i and column (site) j
+    //! const access to the matrix for row (branch) i and column (cat) j
     const AAMutSelOmegaCodonSubMatrix &GetVal(int i, int j) const override;
 
-    //! non const access to the matrix for row (branch) i and column (site) j
+    //! non const access to the matrix for row (branch) i and column (cat) j
     AAMutSelOmegaCodonSubMatrix &operator()(int i, int j) override;
 
     //! Set ne for row (branch) i
-    void SetRowNe(int i, double Ne);
+    void UpdateRowNe(int i, double Ne);
 
-    void SetNe(std::vector<double> const &Ne);
+    //! signal corruption when fitness and Ne have not changed
+    void UpdateCodonMatricesNoFitnessRecomput();
 
-    //! signal corruption of the parameters (matrices should recompute themselves)
-    void CorruptCodonMatrices();
-
-    //! signal corruption for column (site) j
-    void CorruptColCodonMatrices(int j);
-
-    //! signal corruption for row (branch) i
-    void CorruptRowCodonMatrices(int i);
-
-    //! signal corruption for row (branch) i and column (site) j
-    void CorruptMatrix(int i, int j);
+    //! signal corruption for column (cat) j
+    void UpdateColCodonMatrices(int j);
 
     //! update only those matrices for which occupancy[i] != 0
-    void UpdateCodonMatrices(const Selector<int> &occupancy);
+    void UpdateColCodonMatrices(const Selector<int> &occupancy);
+
+    //! signal corruption for row (branch) i and column (cat) j
+    void UpdateMatrix(int i, int j);
 
   private:
-    const CodonStateSpace *codonstatespace;
-    const SubMatrix *nucmatrix;
-    const Selector<std::vector<double>> *aafitnessarray;
     std::vector<std::vector<AAMutSelOmegaCodonSubMatrix *>> matrixbidimarray;
 };
 
@@ -79,38 +71,39 @@ class AAMutSelNeCodonSubMatrixArray : public Array<SubMatrix>,
         const SubMatrix *innucmatrix, const Selector<std::vector<double>> *inaafitnessarray,
         double inne);
 
-    ~AAMutSelNeCodonSubMatrixArray() { Delete(); }
+    ~AAMutSelNeCodonSubMatrixArray() override { Delete(); }
 
-    //! \brief set omega to new value
+    //! return array size
+    int GetSize() const override { return matrixarray.size(); }
+    //! const access to matrix i
+    const AAMutSelOmegaCodonSubMatrix &GetVal(int i) const override { return *matrixarray[i]; }
+    //! non-const access to matrix i
+    AAMutSelOmegaCodonSubMatrix &operator[](int i) override { return *matrixarray[i]; }
+
+    //! \brief set Ne to new value
     //!
     //! should be called only when all matrices share same Ne parameter.
     //! makes an error (with exit) if this is not the case.
-    void SetNe(double inne) { ne = inne; }
-
-    //! return array size
-    int GetSize() const { return aafitnessarray->GetSize(); }
-    //! const access to matrix i
-    const AAMutSelOmegaCodonSubMatrix &GetVal(int i) const { return *matrixarray[i]; }
-    //! non-const access to matrix i
-    AAMutSelOmegaCodonSubMatrix &operator[](int i) { return *matrixarray[i]; }
-
-    //! const acess to nucleotide matrix
-    const SubMatrix &GetNucMatrix() const { return *nucmatrix; }
+    void UpdateNe(double ne) {
+        for (int i = 0; i < GetSize(); i++) { (*this)[i].UpdateNe(ne); }
+    }
 
     //! update all matrices
-    void UpdateCodonMatrices();
+    void UpdateCodonMatricesNoFitnessRecomput() {
+        for (int i = 0; i < GetSize(); i++) { (*this)[i].CorruptMatrixNoFitnessRecomput(); }
+    };
 
     //! update matrices of component i
-    void UpdateCodonMatrices(int i);
+    void UpdateCodonMatrices(int i) { (*this)[i].CorruptMatrix(); };
+
+    void UpdateCodonMatrices(const Selector<int> &occupancy) {
+        for (int i = 0; i < GetSize(); i++) {
+            if (!occupancy.GetVal(i)) { this->UpdateCodonMatrices(i); }
+        }
+    }
 
   private:
-    void Create();
-
     void Delete();
 
-    const CodonStateSpace *codonstatespace;
-    const SubMatrix *nucmatrix;
-    const Selector<std::vector<double>> *aafitnessarray;
-    double ne;
     std::vector<AAMutSelOmegaCodonSubMatrix *> matrixarray;
 };

@@ -70,14 +70,6 @@ target_link_libraries(globom ${BASE_LIBS})
 add_executable(nodemutsel "src/DatedNodeMutSel.cpp")
 target_link_libraries(nodemutsel bayescode_lib tree_lib)
 
-# Branch Ne mutsel (branchmutsel)
-add_executable(branchmutsel "src/DatedBranchMutSel.cpp")
-target_link_libraries(branchmutsel bayescode_lib tree_lib)
-
-# Read Branch Ne chronogram (readdatedmutsel)
-add_executable(readbranchmutsel "src/ReadDatedBranchMutSel.cpp")
-target_link_libraries(readbranchmutsel bayescode_lib tree_lib)
-
 # Read Branch Ne chronogram (readdatedmutsel)
 add_executable(readnodemutsel "src/ReadDatedNodeMutSel.cpp")
 target_link_libraries(readnodemutsel bayescode_lib tree_lib)

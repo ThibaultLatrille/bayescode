@@ -153,16 +153,17 @@ class AAMutSelOmegaCodonSubMatrixArray : public Array<SubMatrix>,
     const SubMatrix &GetNucMatrix() const { return *nucmatrix; }
 
     //! update all matrices
-    void UpdateCodonMatrices() {
-        if (omegaarray) {
-            for (int i = 0; i < GetSize(); i++) {
+    void UpdateCodonMatrices(bool fitness_recomput = true) {
+        for (int i = 0; i < GetSize(); i++) {
+            if (omegaarray) {
                 (*this)[i].SetOmega(omegaarray->GetVal(i));
-                (*this)[i].CorruptMatrix();
-            }
-        } else {
-            for (int i = 0; i < GetSize(); i++) {
+            } else {
                 (*this)[i].SetOmega(omega);
+            }
+            if (fitness_recomput) {
                 (*this)[i].CorruptMatrix();
+            } else {
+                (*this)[i].CorruptMatrixNoFitnessRecomput();
             }
         }
     }

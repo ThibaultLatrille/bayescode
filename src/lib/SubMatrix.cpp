@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
-// #include "linalg.hpp"
 using namespace std;
 
 int SubMatrix::nuni = 0;
@@ -27,7 +26,7 @@ SubMatrix::SubMatrix(int inNstate, bool innormalise) : Nstate(inNstate), normali
 }
 
 void SubMatrix::Create() {
-    Q = EMatrix(Nstate, Nstate);
+    Q = EMatrix::Zero(Nstate, Nstate);
     u = EMatrix(Nstate, Nstate);
     invu = EMatrix(Nstate, Nstate);
     v = EVector(Nstate);
@@ -70,19 +69,6 @@ void SubMatrix::Create() {
 // ---------------------------------------------------------------------------
 
 SubMatrix::~SubMatrix() {
-    if (!witheigen) {
-        for (int i = 0; i < Nstate; i++) {
-            delete[] ptrQ[i];
-            delete[] ptru[i];
-            delete[] ptrinvu[i];
-        }
-        delete[] ptrQ;
-        delete[] ptru;
-        delete[] ptrinvu;
-        delete[] ptrv;
-        delete[] ptrStationary;
-    }
-
     if (mPow != nullptr) {
         for (int n = 0; n < UniSubNmax; n++) {
             if (mPow[n] != nullptr) {

@@ -112,7 +112,7 @@ class NodeProcess {
 class BranchProcess : public SimpleBranchArray<double> {
   public:
     //! Constructor (with only the tree given as argument)
-    explicit BranchProcess(const NodeProcess &innodeprocess, bool geodesic = false);
+    explicit BranchProcess(const NodeProcess &innodeprocess, bool arithmetic = false);
 
     //! global update of the branch array
     void Update();
@@ -125,70 +125,5 @@ class BranchProcess : public SimpleBranchArray<double> {
     void UpdateBranch(Tree::NodeIndex parent, Tree::NodeIndex node);
 
     const NodeProcess &nodeprocess;
-    bool geodesic;
-};
-
-class BranchWiseMultivariateProcess : public SimpleBranchArray<EVector> {
-  public:
-    BranchWiseMultivariateProcess(
-        const Chronogram &inchrono, const EMatrix &inprecision_matrix, int indimensions);
-
-    //! dimension
-    int GetDimensions() const { return dimensions; };
-
-    double GetBranchLogProb(Tree::BranchIndex branch) const;
-
-    //! get log prob for a given node
-    double GetLocalBranchLogProb(Tree::BranchIndex branch) const;
-
-    //! get contrast
-    EVector GetContrast(Tree::BranchIndex branch) const;
-
-    //! get local log prob for a given node
-    double GetLocalNodeLogProb(Tree::NodeIndex node) const;
-
-    //! get global log prob for all branches
-    double GetLogProb() const;
-
-    EVector root_process;
-    const Chronogram &chronogram;
-    int dimensions;
-    const EMatrix &precision_matrix;
-};
-
-class LeafMultivariateProcess : public SimpleNodeArray<EVector> {
-  public:
-    explicit LeafMultivariateProcess(const BranchWiseMultivariateProcess &inbranchwiseprocess);
-
-    //! get log prob for a given node
-    double GetLogProb(Tree::NodeIndex node) const;
-
-    //! get contrast
-    EVector GetContrast(Tree::NodeIndex node) const;
-
-    double GetTheta(Tree::NodeIndex node) const;
-
-    //! get global log prob for all branches
-    double GetLogProb() const;
-
-  protected:
-    const BranchWiseMultivariateProcess &branchwiseprocess;
-};
-
-class BranchWiseProcess : public SimpleBranchArray<double> {
-  public:
-    BranchWiseProcess(BranchWiseMultivariateProcess &inbranchwise_multivariate, int indimension);
-
-    void SlidingMove(Tree::BranchIndex branch, double m);
-
-    double GetRootVal() const { return root_value; }
-
-    void SlidingRootMove(double m);
-
-    void Update();
-
-  protected:
-    double root_value;
-    int dimension;
-    BranchWiseMultivariateProcess &branchwise_multivariate;
+    bool arithmetic;
 };

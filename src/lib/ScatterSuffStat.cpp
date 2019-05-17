@@ -18,26 +18,6 @@ void ScatterSuffStat::AddSuffStat(NodeMultivariateProcess const &nodeprocessses)
     }
 }
 
-void ScatterSuffStat::AddSuffStat(BranchWiseMultivariateProcess const &branchwiseprocessses,
-    LeafMultivariateProcess const *leafprocessses) {
-    dimensions = branchwiseprocessses.GetDimensions();
-    scattermatrix = EMatrix::Zero(dimensions, dimensions);
-
-    for (Tree::BranchIndex branch = 0; branch < tree.nb_branches(); branch++) {
-        EVector contrast = branchwiseprocessses.GetContrast(branch);
-        scattermatrix += contrast * contrast.transpose();
-    }
-    if (leafprocessses != nullptr) {
-        for (Tree::NodeIndex node = 0; node < static_cast<Tree::NodeIndex>(tree.nb_nodes());
-             node++) {
-            if (tree.is_leaf(node)) {
-                EVector contrast = leafprocessses->GetContrast(node);
-                scattermatrix += contrast * contrast.transpose();
-            }
-        }
-    }
-}
-
 void ScatterSuffStat::SamplePrecisionMatrix(EMatrix &sampling_matrix, int df, double kappa) const {
     sampling_matrix.setZero();
 

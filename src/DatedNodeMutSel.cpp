@@ -25,7 +25,7 @@ class DatedNodeMutselArgParse : public BaseArgParse {
         "", "traitsfile", "Traits file for taxon at the leaves", false, "", "string", cmd};
     ValueArg<std::string> profiles{
         "c", "profiles", "Preferences profiles (to clamp)", false, "", "string", cmd};
-    SwitchArg clamp_gen_time{"", "clamp_gen_time", "Clamp the branch mutation rate", cmd, false};
+    SwitchArg move_root_pop_size{"", "move_root_pop_size", "Clamp the branch mutation rate", cmd, false};
     SwitchArg clamp_pop_sizes{
         "", "clamp_pop_sizes", "Clamp the branch population size", cmd, false};
     SwitchArg clamp_nuc_matrix{"", "clamp_nuc_matrix", "Clamp the nucleotide matrix", cmd, false};
@@ -34,7 +34,7 @@ class DatedNodeMutselArgParse : public BaseArgParse {
     SwitchArg polymorphism_aware{"p", "polymorphism_aware", "Use polymorphic data", cmd, false};
     ValueArg<unsigned> precision{
         "", "precision", "The precision of PRF computation", false, 6, "unsigned", cmd};
-    SwitchArg geodesic{"d", "geodesic", "Use geodesic mean instead of arithmetic", cmd, false};
+    SwitchArg arithmetic{"d", "arithmetic", "Use arithmetic mean instead of arithmetic", cmd, false};
 
     void check() {
         if (condition_aware.getValue()) {
@@ -72,14 +72,14 @@ int main(int argc, char *argv[]) {
             datedmutsel_args.ncat.getValue(), datedmutsel_args.basencat.getValue(),
             datedmutsel_args.condition_aware.getValue(),
             datedmutsel_args.polymorphism_aware.getValue(), datedmutsel_args.precision.getValue(),
-            datedmutsel_args.geodesic.getValue(), datedmutsel_args.clamp_gen_time.getValue(),
+            datedmutsel_args.arithmetic.getValue(), datedmutsel_args.move_root_pop_size.getValue(),
             datedmutsel_args.clamp_pop_sizes.getValue(),
             datedmutsel_args.clamp_nuc_matrix.getValue(),
             datedmutsel_args.clamp_corr_matrix.getValue()));
-
         model->Update();
     }
-
+    model->ResampleSub(1.0);
+    model->MoveParameters(10);
     ConsoleLogger console_logger;
     ChainCheckpoint chain_checkpoint(cmd.chain_name() + ".param", *chain_driver, *model);
     StandardTracer trace(*model, cmd.chain_name());

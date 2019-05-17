@@ -3,18 +3,15 @@
 #include "AAMutSelNeCodonMatrixBidimArray.hpp"
 
 MutSelNeCodonMatrixBidimArray::MutSelNeCodonMatrixBidimArray(
-    const CodonStateSpace *incodonstatespace, const SubMatrix *innucmatrix,
-    const Selector<std::vector<double>> *infitnessarray, const std::vector<double> &pop_size_array)
-    : codonstatespace(incodonstatespace),
-      nucmatrix(innucmatrix),
-      aafitnessarray(infitnessarray),
-      matrixbidimarray(pop_size_array.size(),
-          std::vector<AAMutSelOmegaCodonSubMatrix *>(infitnessarray->GetSize(), nullptr)) {
+    const CodonStateSpace *codonstatespace, const SubMatrix *nucmatrix,
+    const Selector<std::vector<double>> *fitnessarray, const std::vector<double> &pop_size_array)
+    : matrixbidimarray(pop_size_array.size(),
+          std::vector<AAMutSelOmegaCodonSubMatrix *>(fitnessarray->GetSize(), nullptr)) {
     std::cout << GetNrow() << "\t" << GetNcol() << "\n";
     for (int i = 0; i < GetNrow(); i++) {
         for (int j = 0; j < GetNcol(); j++) {
             matrixbidimarray[i][j] = new AAMutSelOmegaCodonSubMatrix(
-                codonstatespace, nucmatrix, infitnessarray->GetVal(j), 1.0, pop_size_array.at(i));
+                codonstatespace, nucmatrix, fitnessarray->GetVal(j), 1.0, pop_size_array.at(i));
         }
     }
     assert(static_cast<int>(matrixbidimarray.size()) == GetNrow());
@@ -38,63 +35,36 @@ AAMutSelOmegaCodonSubMatrix &MutSelNeCodonMatrixBidimArray::operator()(int i, in
     return *matrixbidimarray.at(i).at(j);
 }
 
-void MutSelNeCodonMatrixBidimArray::SetRowNe(int i, double Ne) {
-    for (int j = 0; j < this->GetNcol(); j++) { (*this)(i, j).SetNe(Ne); }
+void MutSelNeCodonMatrixBidimArray::UpdateRowNe(int i, double Ne) {
+    for (int j = 0; j < this->GetNcol(); j++) { (*this)(i, j).UpdateNe(Ne); }
 }
 
-void MutSelNeCodonMatrixBidimArray::SetNe(std::vector<double> const &Ne) {
-    assert(GetNcol() > 0);
+void MutSelNeCodonMatrixBidimArray::UpdateCodonMatricesNoFitnessRecomput() {
+    for (int i = 0; i < this->GetNrow(); i++) {
+        for (int j = 0; j < GetNcol(); j++) { (*this)(i, j).CorruptMatrixNoFitnessRecomput(); }
+    }
+}
+
+void MutSelNeCodonMatrixBidimArray::UpdateColCodonMatrices(int j) {
     assert(GetNrow() > 0);
-    assert(GetNrow() == static_cast<int>(Ne.size()));
-    for (int i = 0; i < this->GetNrow(); i++) { SetRowNe(i, Ne[i]); }
+    for (int i = 0; i < GetNrow(); i++) { UpdateMatrix(i, j); }
 }
 
-void MutSelNeCodonMatrixBidimArray::CorruptCodonMatrices() {
-    for (int j = 0; j < GetNcol(); j++) { CorruptColCodonMatrices(j); }
-}
+void MutSelNeCodonMatrixBidimArray::UpdateMatrix(int i, int j) { (*this)(i, j).CorruptMatrix(); }
 
-void MutSelNeCodonMatrixBidimArray::CorruptColCodonMatrices(int j) {
-    assert(GetNrow() > 0);
-    for (int i = 0; i < GetNrow(); i++) { CorruptMatrix(i, j); }
-}
-
-void MutSelNeCodonMatrixBidimArray::CorruptRowCodonMatrices(int i) {
-    assert(GetNcol() > 0);
-    for (int j = 0; j < GetNcol(); j++) { CorruptMatrix(i, j); }
-}
-
-void MutSelNeCodonMatrixBidimArray::CorruptMatrix(int i, int j) { (*this)(i, j).CorruptMatrix(); }
-
-void MutSelNeCodonMatrixBidimArray::UpdateCodonMatrices(const Selector<int> &occupancy) {
+void MutSelNeCodonMatrixBidimArray::UpdateColCodonMatrices(const Selector<int> &occupancy) {
     for (int col = 0; col < GetNcol(); col++) {
-        if (!occupancy.GetVal(col)) { (*this).CorruptColCodonMatrices(col); }
+        if (!occupancy.GetVal(col)) { (*this).UpdateColCodonMatrices(col); }
     }
 }
 
 AAMutSelNeCodonSubMatrixArray::AAMutSelNeCodonSubMatrixArray(
-    const CodonStateSpace *incodonstatespace, const SubMatrix *innucmatrix,
-    const Selector<std::vector<double>> *inaafitnessarray, double inne)
-    : codonstatespace(incodonstatespace),
-      nucmatrix(innucmatrix),
-      aafitnessarray(inaafitnessarray),
-      ne(inne),
-      matrixarray(inaafitnessarray->GetSize()) {
-    Create();
-}
-
-void AAMutSelNeCodonSubMatrixArray::UpdateCodonMatrices() {
-    for (int i = 0; i < GetSize(); i++) { UpdateCodonMatrices(i); }
-}
-
-void AAMutSelNeCodonSubMatrixArray::UpdateCodonMatrices(int i) {
-    (*this)[i].SetNe(ne);
-    (*this)[i].CorruptMatrix();
-}
-
-void AAMutSelNeCodonSubMatrixArray::Create() {
-    for (int i = 0; i < GetSize(); i++) {
+    const CodonStateSpace *codonstatespace, const SubMatrix *nucmatrix,
+    const Selector<std::vector<double>> *aafitnessarray, double ne)
+    : matrixarray(aafitnessarray->GetSize()) {
+    for (int i = 0; i < aafitnessarray->GetSize(); i++) {
         matrixarray[i] = new AAMutSelOmegaCodonSubMatrix(
-            codonstatespace, nucmatrix, aafitnessarray->GetVal(i), 1.0, ne);
+                codonstatespace, nucmatrix, aafitnessarray->GetVal(i), 1.0, ne);
     }
 }
 
