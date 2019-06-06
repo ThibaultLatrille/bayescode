@@ -52,7 +52,8 @@ void NodeAges::SlidingMove(Tree::NodeIndex node, double scale) {
     }
     double upper_bound = this->GetVal(GetTree().parent(node));
 
-    assert(upper_bound >= lower_bound);
+    assert(upper_bound >= this->GetVal(node));
+    assert(this->GetVal(node) >= lower_bound);
 
     double x = this->GetVal(node) + scale * (upper_bound - lower_bound);
 

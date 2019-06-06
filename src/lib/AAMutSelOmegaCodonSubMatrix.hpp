@@ -38,7 +38,7 @@ class AAMutSelOmegaCodonSubMatrix : public virtual NucCodonSubMatrix,
     //!
     //! Note: to avoid numerical errors, this function adds 1e-8.
     double GetFitness(int a) const {
-        assert(std::abs((exp(Ne * log(aa[a])) + 1e-8) - fitnesses[a]) < 1e-6);
+        assert(std::abs((exp(4 * Ne * log(aa[a])) + 1e-8) - fitnesses[a]) < 1e-6);
         return fitnesses[a];
     }
 
@@ -59,7 +59,7 @@ class AAMutSelOmegaCodonSubMatrix : public virtual NucCodonSubMatrix,
 
     void CorruptMatrix() override {
         for (size_t a{0}; a < aa.size(); a++) {
-            fitnesses[a] = exp(Ne * log(aa[a])) + 1e-8;
+            fitnesses[a] = exp(4 * Ne * log(aa[a])) + 1e-8;
             logfitnesses[a] = log(fitnesses[a]);
         }
         SubMatrix::CorruptMatrix();

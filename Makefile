@@ -37,6 +37,7 @@ clean:
 	@rm -rf _build_coverage
 	@rm -rf _test
 	@rm -rf _aamutsel
+	@rm -rf _dated
 
 # ==============================================================================================================
 #  CODE QUALITY

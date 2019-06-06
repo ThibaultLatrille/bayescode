@@ -22,9 +22,9 @@ class DatedNodeMutselArgParse : public BaseArgParse {
         "One Ne per condition, if the tree doesn't have condition, then one Ne per branch", cmd,
         false};
     ValueArg<std::string> traitsfile{
-        "", "traitsfile", "Traits file for taxon at the leaves", false, "", "string", cmd};
+        "", "traitsfile", "Traits file for taxon at the leaves", false, "Null", "string", cmd};
     ValueArg<std::string> profiles{
-        "c", "profiles", "Preferences profiles (to clamp)", false, "", "string", cmd};
+        "c", "profiles", "Preferences profiles (to clamp)", false, "Null", "string", cmd};
     SwitchArg move_root_pop_size{"", "move_root_pop_size", "Clamp the branch mutation rate", cmd, false};
     SwitchArg clamp_pop_sizes{
         "", "clamp_pop_sizes", "Clamp the branch population size", cmd, false};

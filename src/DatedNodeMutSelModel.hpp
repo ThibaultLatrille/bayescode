@@ -132,7 +132,7 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
 }
 
 class DatedNodeMutSelModel : public ChainComponent {
-    std::string datafile, treefile, traitsfile, profiles;
+    std::string datafile, treefile, traitsfile{"Null"}, profiles{"Null"};
 
     bool condition_aware;
     bool polymorphism_aware;
@@ -318,9 +318,10 @@ class DatedNodeMutSelModel : public ChainComponent {
         if (Ncat <= 0) { Ncat = Nsite; }
         if (Ncat > Nsite) { Ncat = Nsite; }
         if (Ncat > 100) { Ncat = 100; }
-        if (!profiles.empty() and profiles != "Null") {
+        if (profiles != "Null") {
             prefs = open_preferences(profiles);
             clamp_profiles = true;
+            move_root_pop_size = true;
             Ncat = static_cast<int>(std::get<0>(prefs).size());
             assert(static_cast<int>(std::get<1>(prefs).size()) == Nsite);
         }
@@ -332,7 +333,7 @@ class DatedNodeMutSelModel : public ChainComponent {
 
         taxonset = codondata->GetTaxonSet();
 
-        if (!traitsfile.empty() and traitsfile != "Null") {
+        if (traitsfile != "Null") {
             taxon_traits = new TaxonTraits(traitsfile, *taxonset, polymorphism_aware);
         }
 
@@ -470,7 +471,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         rootsitecodonmatrixarray =
             new RootComponentMatrixSelector<SubMatrix>(rootcomponentcodonmatrixarray, sitealloc);
 
-        // global theta (4*Ne*u = 1e-5 by default, and maximum value 0.1)
+        // The scaling factor of theta (4*Ne*u) since
         theta_scale = 1e-5;
         if (PolymorphismAware()) {
             poissonrandomfield = new PoissonRandomField(
@@ -1393,22 +1394,14 @@ class DatedNodeMutSelModel : public ChainComponent {
         double logratio = -LocalNodeRateLogProb(node, mut_rates);
 
         double m = tuning * (Random::Uniform() - 0.5);
-        if (mut_rates) {
-            nodemutrates->SlidingMove(node, m);
-        } else {
-            nodegentimes->SlidingMove(node, m);
-        }
+        (mut_rates ? nodemutrates : nodegentimes)->SlidingMove(node, m);
         UpdateLocalBranchRates(node);
 
         logratio += LocalNodeRateLogProb(node, mut_rates);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
-            if (mut_rates) {
-                nodemutrates->SlidingMove(node, -m);
-            } else {
-                nodegentimes->SlidingMove(node, -m);
-            }
+            (mut_rates ? nodemutrates : nodegentimes)->SlidingMove(node, -m);
             UpdateLocalBranchRates(node);
         }
         MoveAcceptation(MoveName("NodeRate", tuning), accept);
@@ -1418,11 +1411,9 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! MH moves on branch Ne (brownian process)
     void MoveNodePopSizes(double tuning, int nrep, bool leaves_to_root) {
         for (int rep = 0; rep < nrep; rep++) {
-            if (leaves_to_root) {
-                for (Tree::NodeIndex node :
-                    leaves_to_root ? tree->LeavesToRootIter() : tree->RootToLeavesIter()) {
-                    if (!tree->is_root(node) or clamp_profiles) { MoveNodePopSize(node, tuning); }
-                }
+            for (Tree::NodeIndex node :
+                leaves_to_root ? tree->LeavesToRootIter() : tree->RootToLeavesIter()) {
+                if (!tree->is_root(node) or clamp_profiles) { MoveNodePopSize(node, tuning); }
             }
         }
     }
@@ -1940,9 +1931,9 @@ std::ostream &operator<<(std::ostream &os, DatedNodeMutSelModel &m) {
     os << "DatedNodeMutSelModel" << '\t';
     os << m.datafile << '\t';
     os << m.treefile << '\t';
-    if (m.traitsfile.empty()) { m.traitsfile = "Null"; }
+    assert(!m.traitsfile.empty());
     os << m.traitsfile << '\t';
-    if (m.profiles.empty()) { m.profiles = "Null"; }
+    assert(!m.profiles.empty());
     os << m.profiles << '\t';
     os << m.Ncat << '\t';
     os << m.baseNcat << '\t';
