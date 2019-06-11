@@ -115,6 +115,8 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
         }
 
         bool push = true;
+        assert(std::abs(std::accumulate(fitness_profil.begin(), fitness_profil.end(), 0.0) - 1.0) <
+               1e-5);
         for (size_t i = 0; i < fitness_profiles.size(); i++) {
             if (distance(fitness_profiles[i], fitness_profil) < 1e-5) {
                 push = false;
@@ -132,7 +134,7 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
 }
 
 class DatedNodeMutSelModel : public ChainComponent {
-    std::string datafile, treefile, traitsfile{"Null"}, profiles{"Null"};
+    std::string datafile, treefile, traitsfile{"Null"}, profilesfile{"Null"}, fossilsfile{"Null"};
 
     bool condition_aware;
     bool polymorphism_aware;
@@ -290,11 +292,12 @@ class DatedNodeMutSelModel : public ChainComponent {
         std::string inprofiles, int inNcat, int inbaseNcat, bool incondition_aware,
         bool inpolymorphism_aware, unsigned inprecision, bool inarithmetic,
         bool inmove_root_pop_size, bool inclamp_pop_sizes, bool inclamp_nuc_matrix,
-        bool inclamp_corr_matrix)
+        bool inclamp_corr_matrix, std::string infossilsfile)
         : datafile(std::move(indatafile)),
           treefile(std::move(intreefile)),
           traitsfile(std::move(intraitsfile)),
-          profiles(std::move(inprofiles)),
+          profilesfile(std::move(inprofiles)),
+          fossilsfile(std::move(infossilsfile)),
           condition_aware(incondition_aware),
           polymorphism_aware(inpolymorphism_aware),
           precision(inprecision),
@@ -318,8 +321,8 @@ class DatedNodeMutSelModel : public ChainComponent {
         if (Ncat <= 0) { Ncat = Nsite; }
         if (Ncat > Nsite) { Ncat = Nsite; }
         if (Ncat > 100) { Ncat = 100; }
-        if (profiles != "Null") {
-            prefs = open_preferences(profiles);
+        if (profilesfile != "Null") {
+            prefs = open_preferences(profilesfile);
             clamp_profiles = true;
             move_root_pop_size = true;
             Ncat = static_cast<int>(std::get<0>(prefs).size());
@@ -345,7 +348,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         Nbranch = tree->nb_branches();
         branchdnds = new SimpleBranchArray<double>(*tree, 0.0);
         // Node ages
-        nodeages = new NodeAges(*tree);
+        nodeages = new NodeAges(*tree, fossilsfile);
         // Chronogram (diff between node ages)
         chronogram = new Chronogram(*nodeages);
 
@@ -1084,7 +1087,11 @@ class DatedNodeMutSelModel : public ChainComponent {
     // Node ages and branch rates
     //! \brief log prob to be recomputed when moving age of focal node
     double LocalNodeAgeLogProb(Tree::NodeIndex node) const {
-        return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+        if (GetTree().is_root(node)) {
+            return NodeMultivariateLogPrior() + BranchLengthSuffStatLogProb();
+        } else {
+            return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+        }
     }
 
     //! \brief log prob to be recomputed when moving branch rates (brownian process) around of focal
@@ -1117,6 +1124,12 @@ class DatedNodeMutSelModel : public ChainComponent {
     double BranchLengthSuffStatLogProb(Tree::BranchIndex branch) const {
         return branchlengthpathsuffstatarray->GetVal(branch).GetLogProb(
             branchlength->GetVal(branch));
+    }
+
+    //! \brief return log prob of current substitution mapping (on all branches), as a function of
+    //! the length all branches
+    double BranchLengthSuffStatLogProb() const {
+        return branchlengthpathsuffstatarray->GetLogProb(*branchlength);
     }
 
     //! \brief log prob to be recomputed when moving Ne (brownian process) around of focal node
@@ -1217,6 +1230,7 @@ class DatedNodeMutSelModel : public ChainComponent {
             for (int site = 0; site < Nsite; site++) {
                 int sub_state = phyloprocess->GetPathState(taxon, site);
                 int data_state = codondata->GetState(taxon, site);
+                if (data_state == -1) { continue; }
                 std::vector<int> path_state_neighbors =
                     codondata->GetCodonStateSpace()->GetNeighbors(sub_state);
                 auto find_data_in_sub_neighbor =
@@ -1317,8 +1331,8 @@ class DatedNodeMutSelModel : public ChainComponent {
     void MoveNodeAges(double tuning, int nrep, bool leaves_to_root) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node :
-                leaves_to_root ? tree->LeavesToRootIter() : tree->RootToLeavesIter()) {
-                if (!tree->is_root(node) and !tree->is_leaf(node)) { MoveNodeAge(node, tuning); }
+                leaves_to_root ? tree->leaves_root_to_iter() : tree->root_to_leaves_iter()) {
+                if (!tree->is_leaf(node)) { MoveNodeAge(node, tuning); }
             }
         }
     }
@@ -1348,7 +1362,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         for (int rep = 0; rep < nrep; rep++) {
             for (int trait_dim = 0; trait_dim < taxon_traits->GetDim(); trait_dim++) {
                 for (Tree::NodeIndex node :
-                    leaves_to_root ? tree->LeavesToRootIter() : tree->RootToLeavesIter()) {
+                    leaves_to_root ? tree->leaves_root_to_iter() : tree->root_to_leaves_iter()) {
                     if (!tree->is_leaf(node) or
                         !taxon_traits->DataPresence(
                             phyloprocess->GetTaxonMap().NodeToTaxon(node), trait_dim)) {
@@ -1378,7 +1392,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     void MoveNodeRates(double tuning, int nrep, bool leaves_to_root) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node :
-                leaves_to_root ? tree->LeavesToRootIter() : tree->RootToLeavesIter()) {
+                leaves_to_root ? tree->leaves_root_to_iter() : tree->root_to_leaves_iter()) {
                 MoveNodeRate(node, tuning, true);
                 if (PolymorphismAware() and
                     (!tree->is_leaf(node) or !taxon_traits->GenTimePresence(
@@ -1412,7 +1426,7 @@ class DatedNodeMutSelModel : public ChainComponent {
     void MoveNodePopSizes(double tuning, int nrep, bool leaves_to_root) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node :
-                leaves_to_root ? tree->LeavesToRootIter() : tree->RootToLeavesIter()) {
+                leaves_to_root ? tree->leaves_root_to_iter() : tree->root_to_leaves_iter()) {
                 if (!tree->is_root(node) or clamp_profiles) { MoveNodePopSize(node, tuning); }
             }
         }
@@ -1901,7 +1915,7 @@ class DatedNodeMutSelModel : public ChainComponent {
 };
 
 std::istream &operator>>(std::istream &is, std::unique_ptr<DatedNodeMutSelModel> &m) {
-    std::string model_name, datafile, treefile, traitsfile, profiles;
+    std::string model_name, datafile, treefile, traitsfile, profilesfile, fossilsfile;
     int Ncat, baseNcat;
     bool condition_aware, polymorphism_aware, arithmetic, move_root_pop_size, clamp_pop_sizes,
         clamp_nuc_matrix, clamp_corr_matrix;
@@ -1913,13 +1927,13 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedNodeMutSelModel>
         exit(1);
     }
 
-    is >> datafile >> treefile >> traitsfile >> profiles;
+    is >> datafile >> treefile >> traitsfile >> profilesfile >> fossilsfile;
     is >> Ncat >> baseNcat;
     is >> condition_aware >> polymorphism_aware >> precision >> arithmetic >> move_root_pop_size >>
         clamp_pop_sizes >> clamp_nuc_matrix >> clamp_corr_matrix;
-    m = std::make_unique<DatedNodeMutSelModel>(datafile, treefile, traitsfile, profiles, Ncat,
+    m = std::make_unique<DatedNodeMutSelModel>(datafile, treefile, traitsfile, profilesfile, Ncat,
         baseNcat, condition_aware, polymorphism_aware, precision, arithmetic, move_root_pop_size,
-        clamp_pop_sizes, clamp_nuc_matrix, clamp_corr_matrix);
+        clamp_pop_sizes, clamp_nuc_matrix, clamp_corr_matrix, fossilsfile);
     Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
@@ -1933,8 +1947,10 @@ std::ostream &operator<<(std::ostream &os, DatedNodeMutSelModel &m) {
     os << m.treefile << '\t';
     assert(!m.traitsfile.empty());
     os << m.traitsfile << '\t';
-    assert(!m.profiles.empty());
-    os << m.profiles << '\t';
+    assert(!m.profilesfile.empty());
+    os << m.profilesfile << '\t';
+    assert(!m.fossilsfile.empty());
+    os << m.fossilsfile << '\t';
     os << m.Ncat << '\t';
     os << m.baseNcat << '\t';
     os << m.condition_aware << '\t';

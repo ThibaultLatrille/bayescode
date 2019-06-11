@@ -1,11 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <queue>
 #include <vector>
 #include "interface.hpp"
 #include "nhx-parser.hpp"
-#include <algorithm>
 
 // a tree with both a vector of parents and a vector of children
 class DoubleVectorTree : public Tree {
@@ -18,7 +18,7 @@ class DoubleVectorTree : public Tree {
     std::vector<NodeIndex> breadth_first_inv_iter;
 
   public:
-    DoubleVectorTree(const AnnotatedTree& input_tree) {
+    explicit DoubleVectorTree(const AnnotatedTree& input_tree) {
         root_ = input_tree.root();
         for (std::size_t i = 0; i < input_tree.nb_nodes(); i++) {
             parent_.push_back(input_tree.parent(i));
@@ -47,12 +47,12 @@ class DoubleVectorTree : public Tree {
     NodeIndex root() const final { return root_; }
     std::size_t nb_nodes() const final { return parent_.size(); }
     bool is_root(NodeIndex i) const final { return i == root_; }
-    bool is_leaf(NodeIndex i) const final { return children_.at(i).size() == 0; }
+    bool is_leaf(NodeIndex i) const final { return children_.at(i).empty(); }
     int nb_branches() const final { return nb_nodes() - 1; }
     BranchIndex branch_index(NodeIndex i) const final { return i - 1; }
     NodeIndex node_index(BranchIndex i) const final { return i + 1; }
-    const std::vector<NodeIndex>& RootToLeavesIter() const final { return breadth_first_iter; }
-    const std::vector<NodeIndex>& LeavesToRootIter() const final { return breadth_first_inv_iter; }
+    const std::vector<NodeIndex>& root_to_leaves_iter() const final { return breadth_first_iter; }
+    const std::vector<NodeIndex>& leaves_root_to_iter() const final { return breadth_first_inv_iter; }
 };
 
 std::vector<int> taxa_index_from_parser(TreeParser& parser, const std::vector<std::string>& taxa);

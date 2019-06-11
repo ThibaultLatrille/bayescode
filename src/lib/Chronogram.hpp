@@ -8,25 +8,27 @@
  *
  * Takes one argument: A Tree.
  *
- * Used in DatedOmegaModel: Give an age to each node of the tree, with the constrain that each node
+ * Used in DatedNodeMutSelModel: Give an age to each node of the tree, with the constrain that each node
  * is older than its children (may be more than one child) and younger than its parent (at most one
  * parent). The leaves (the youngest) are set to 0, and the root (the oldest) is set to 1.
  */
 class NodeAges : public SimpleNodeArray<double> {
   public:
-    explicit NodeAges(const Tree& intree);
-
-    //! sample all entries uniformly by finding the longest path to the leaves.
-    void UniformSample();
+    explicit NodeAges(const Tree& intree, const string& fossils);
 
     //! find the longest path from this node to the farthest leaf.
-    double EccentricityRecursive(Tree::NodeIndex node);;
+    double EccentricityRecursive(Tree::NodeIndex node);
 
     //! check that the constrained are respected
-    void Check() const;
+    bool Check() const;
 
     //! MH move on a node age, respecting the constrains.
     void SlidingMove(Tree::NodeIndex node, double scale);
+
+    std::set<Tree::NodeIndex> node_clamped_set{};
+    std::unordered_map<Tree::NodeIndex, double> clamped_ages{};
+    std::unordered_map<Tree::NodeIndex, double> clamped_lower_bound{};
+    std::unordered_map<Tree::NodeIndex, double> clamped_upper_bound{};
 };
 
 
@@ -35,7 +37,7 @@ class NodeAges : public SimpleNodeArray<double> {
  *
  * Takes one argument: a NodeAges.
  *
- * Used in DatedOemgaModel: The time of the branch j is given by the ages of the nodes at the tip
+ * Used in DatedNodeMutSelModel: The time of the branch j is given by the ages of the nodes at the tip
  * of this branch (j).
  */
 class Chronogram : public SimpleBranchArray<double> {

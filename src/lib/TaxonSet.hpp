@@ -28,24 +28,34 @@ class TaxonSet {
   public:
     //! constructor, based on a vector of taxon names
     explicit TaxonSet(const std::vector<std::string> &names);
+
     //! constructor, based on a vector of taxon names
     TaxonSet(const TaxonSet &from);
+
     //! default constructor
     ~TaxonSet() = default;
 
     //! return number of taxa
     int GetNtaxa() const { return Ntaxa; }
+
     //! return taxon name, given the index
     std::string GetTaxon(int index) const { return taxlist[index]; }
+
+    //! return true if taxon is present, given the name
+    bool TaxonPresent(std::string const &intaxon) const;
+
     //! return taxon index, given the name
     int GetTaxonIndex(std::string const &intaxon) const;
+
     //! return taxon index, given incomplete name (first part)
     int GetTaxonIndexWithIncompleteName(std::string const &taxname) const;
+
     //! formatted output to stream
     void ToStream(std::ostream &os) const;
 
     //! The taxon given the node
     std::vector<int> get_index_table(const Tree *tree) const;
+
     //! The node given the taxon
     std::vector<int> get_reverse_index_table(const Tree *tree) const;
 
@@ -62,4 +72,8 @@ inline int TaxonSet::GetTaxonIndex(std::string const &intaxon) const {
         exit(1);
     }
     return i->second - 1;
+}
+
+inline bool TaxonSet::TaxonPresent(std::string const &intaxon) const {
+    return taxmap.find(intaxon) != taxmap.end();
 }

@@ -28,7 +28,7 @@ class TaxonTraits {
             std::string word;
             // Skip the first column (taxon name)
             getline(line_stream, word, sep);
-            assert(word == "TaxonName");
+            assert(word == "TaxonName" or word == "Name");
             int counter = 0;
             while (getline(line_stream, word, sep)) {
                 if (word == "LogGenerationTime" and polymorphism_aware) {
@@ -51,6 +51,7 @@ class TaxonTraits {
             std::istringstream line_stream(line);
             std::string taxon{};
             getline(line_stream, taxon, sep);
+            if (!taxon_set.TaxonPresent(taxon)) { continue; }
             int id = taxon_set.GetTaxonIndex(taxon);
             taxon_presence.at(id) = true;
             if (!header.empty()) {
@@ -85,12 +86,11 @@ class TaxonTraits {
 
     int GetDim() const { return dimensions; }
 
-    int TraitDimToMultivariateDim(int trait_dim) const { return 2 + gentime + trait_dim ; }
+    int TraitDimToMultivariateDim(int trait_dim) const { return 2 + gentime + trait_dim; }
+
     int MultivariateDimToTraitDim(int multi_dim) const { return multi_dim - 2 - gentime; }
 
-    string GetHeader(int multi_dim) {
-        return header.at(MultivariateDimToTraitDim(multi_dim));
-    }
+    string GetHeader(int multi_dim) { return header.at(MultivariateDimToTraitDim(multi_dim)); }
 
     bool DataPresence(int taxon, int dim) const {
         if (taxon_presence[taxon]) {

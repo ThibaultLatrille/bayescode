@@ -57,7 +57,7 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
                 }
             }
         }
-        for (Tree::NodeIndex node : GetTree().LeavesToRootIter()) {
+        for (Tree::NodeIndex node : GetTree().leaves_root_to_iter()) {
             if (!GetTree().is_leaf(node)) {
                 for (int trait_dim = 0; trait_dim < taxon_traits.GetDim(); trait_dim++) {
                     int dim = taxon_traits.TraitDimToMultivariateDim(trait_dim);

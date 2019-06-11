@@ -12,7 +12,7 @@ using namespace std;
 
 class DatedNodeMutselArgParse : public BaseArgParse {
   public:
-    DatedNodeMutselArgParse(ChainCmdLine &cmd) : BaseArgParse(cmd) {}
+    explicit DatedNodeMutselArgParse(ChainCmdLine &cmd) : BaseArgParse(cmd) {}
 
     ValueArg<int> ncat{
         "", "ncat", "truncation of the first-level stick-breaking process", false, 100, "int", cmd};
@@ -25,7 +25,8 @@ class DatedNodeMutselArgParse : public BaseArgParse {
         "", "traitsfile", "Traits file for taxon at the leaves", false, "Null", "string", cmd};
     ValueArg<std::string> profiles{
         "c", "profiles", "Preferences profiles (to clamp)", false, "Null", "string", cmd};
-    SwitchArg move_root_pop_size{"", "move_root_pop_size", "Clamp the branch mutation rate", cmd, false};
+    SwitchArg move_root_pop_size{"", "move_root_pop_size",
+        "Move Ne at the root (for the equilibrium frequencies)", cmd, false};
     SwitchArg clamp_pop_sizes{
         "", "clamp_pop_sizes", "Clamp the branch population size", cmd, false};
     SwitchArg clamp_nuc_matrix{"", "clamp_nuc_matrix", "Clamp the nucleotide matrix", cmd, false};
@@ -34,14 +35,17 @@ class DatedNodeMutselArgParse : public BaseArgParse {
     SwitchArg polymorphism_aware{"p", "polymorphism_aware", "Use polymorphic data", cmd, false};
     ValueArg<unsigned> precision{
         "", "precision", "The precision of PRF computation", false, 6, "unsigned", cmd};
-    SwitchArg arithmetic{"d", "arithmetic", "Use arithmetic mean instead of arithmetic", cmd, false};
+    SwitchArg arithmetic{
+        "d", "arithmetic", "Use arithmetic mean instead of arithmetic", cmd, false};
+    ValueArg<std::string> fossils{
+        "", "fossils", "Fossils data (to clamp the node ages)", false, "Null", "string", cmd};
 
     void check() {
         if (condition_aware.getValue()) {
             cerr << "The switch parameter ([-b] or [--condition_aware]) is not yet implemented."
                  << endl;
         }
-        if (!profiles.getValue().empty()) {
+        if (profiles.getValue() != "Null") {
             cout << "Preferences are clamped (option [--profiles <string>]), thus options [--ncat] "
                     "and [-basencat] are not used"
                  << endl;
@@ -61,21 +65,20 @@ int main(int argc, char *argv[]) {
         is >> model;
         check_restart(*model, cmd.chain_name() + ".trace");
     } else {
-        InferenceAppArgParse args(cmd);
-        DatedNodeMutselArgParse datedmutsel_args(cmd);
+        InferenceAppArgParse inference_args(cmd);
+        DatedNodeMutselArgParse args(cmd);
         cmd.parse();
-        datedmutsel_args.check();
-        chain_driver =
-            new ChainDriver(cmd.chain_name(), args.every.getValue(), args.until.getValue());
-        model = unique_ptr<DatedNodeMutSelModel>(new DatedNodeMutSelModel(args.alignment.getValue(),
-            args.treefile.getValue(), datedmutsel_args.traitsfile.getValue(), datedmutsel_args.profiles.getValue(),
-            datedmutsel_args.ncat.getValue(), datedmutsel_args.basencat.getValue(),
-            datedmutsel_args.condition_aware.getValue(),
-            datedmutsel_args.polymorphism_aware.getValue(), datedmutsel_args.precision.getValue(),
-            datedmutsel_args.arithmetic.getValue(), datedmutsel_args.move_root_pop_size.getValue(),
-            datedmutsel_args.clamp_pop_sizes.getValue(),
-            datedmutsel_args.clamp_nuc_matrix.getValue(),
-            datedmutsel_args.clamp_corr_matrix.getValue()));
+        args.check();
+        chain_driver = new ChainDriver(
+            cmd.chain_name(), inference_args.every.getValue(), inference_args.until.getValue());
+        model = std::make_unique<DatedNodeMutSelModel>(inference_args.alignment.getValue(),
+            inference_args.treefile.getValue(), args.traitsfile.getValue(),
+            args.profiles.getValue(), args.ncat.getValue(), args.basencat.getValue(),
+            args.condition_aware.getValue(), args.polymorphism_aware.getValue(),
+            args.precision.getValue(), args.arithmetic.getValue(),
+            args.move_root_pop_size.getValue(), args.clamp_pop_sizes.getValue(),
+            args.clamp_nuc_matrix.getValue(), args.clamp_corr_matrix.getValue(),
+            args.fossils.getValue());
         model->Update();
     }
     model->ResampleSub(1.0);

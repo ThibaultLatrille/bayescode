@@ -120,12 +120,13 @@ class BranchwiseProduct : public SimpleBranchArray<double> {
     void UpdateLocal(Tree::NodeIndex node) {
         // update all branch lengths around this node
 
-        // for all children
-        for (auto &child_node : this->GetTree().children(node)) {
-            UpdateBranch(this->GetTree().branch_index(child_node));
-        }
-
-        if (!this->GetTree().is_root(node)) {
+        if (this->GetTree().is_root(node)) {
+            Update();
+        } else {
+            // for all children
+            for (auto &child_node : this->GetTree().children(node)) {
+                UpdateBranch(this->GetTree().branch_index(child_node));
+            }
             // for the branch attached to the node
             UpdateBranch(this->GetTree().branch_index(node));
         }
