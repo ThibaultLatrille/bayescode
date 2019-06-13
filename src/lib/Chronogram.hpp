@@ -17,7 +17,7 @@ class NodeAges : public SimpleNodeArray<double> {
     explicit NodeAges(const Tree& intree, const string& fossils);
 
     //! find the longest path from this node to the farthest leaf.
-    double EccentricityRecursive(Tree::NodeIndex node);
+    double EccentricityRecursive(Tree::NodeIndex node) const;
 
     //! check that the constrained are respected
     bool Check() const;

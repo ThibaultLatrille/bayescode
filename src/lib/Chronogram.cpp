@@ -3,22 +3,22 @@
 #include <fstream>
 #include <sstream>
 
+using namespace std;
+
 NodeAges::NodeAges(const Tree &intree, const string &fossilsfile)
     : SimpleNodeArray<double>(intree, 0.0) {
     if (fossilsfile != "Null") {
         // for line in file
-        std::ifstream input_stream{fossilsfile};
-        if (!input_stream) {
-            std::cerr << "Fossils file " << fossilsfile << " doesn't exist" << std::endl;
-        }
+        ifstream input_stream{fossilsfile};
+        if (!input_stream) { cerr << "Fossils file " << fossilsfile << " doesn't exist" << endl; }
 
-        std::string line;
+        string line;
         // skip the header of the file
         getline(input_stream, line);
         char sep{'\t'};
         {
-            std::istringstream line_stream(line);
-            std::string word;
+            istringstream line_stream(line);
+            string word;
             // Skip the first column (taxon name)
             getline(line_stream, word, sep);
             assert(word == "NodeName");
@@ -30,8 +30,8 @@ NodeAges::NodeAges(const Tree &intree, const string &fossilsfile)
             assert(word == "UpperBound");
         }
         while (getline(input_stream, line)) {
-            std::istringstream line_stream(line);
-            std::string word;
+            istringstream line_stream(line);
+            string word;
             // Skip the first column (taxon name)
             Tree::NodeIndex node_clamped{-1};
             getline(line_stream, word, sep);
@@ -43,18 +43,18 @@ NodeAges::NodeAges(const Tree &intree, const string &fossilsfile)
                 }
             }
             if (node_clamped == -1) {
-                std::cerr << word << " node is unknown." << std::endl;
+                cerr << word << " node is unknown." << endl;
                 continue;
             }
             node_clamped_set.insert(node_clamped);
             getline(line_stream, word, sep);
-            clamped_ages[node_clamped] = std::stod(word);
+            clamped_ages[node_clamped] = stod(word);
             (*this)[node_clamped] = clamped_ages[node_clamped];
             getline(line_stream, word, sep);
-            clamped_lower_bound[node_clamped] = std::stod(word);
+            clamped_lower_bound[node_clamped] = stod(word);
             assert(clamped_lower_bound[node_clamped] <= clamped_ages[node_clamped]);
             getline(line_stream, word, sep);
-            clamped_upper_bound[node_clamped] = std::stod(word);
+            clamped_upper_bound[node_clamped] = stod(word);
             assert(clamped_upper_bound[node_clamped] >= clamped_ages[node_clamped]);
         }
         if (node_clamped_set.count(GetTree().root()) == 0) {
@@ -75,23 +75,23 @@ NodeAges::NodeAges(const Tree &intree, const string &fossilsfile)
         clamped_lower_bound[GetTree().root()] = 1.0;
         clamped_upper_bound[GetTree().root()] = 1.0;
     }
-    std::set<Tree::NodeIndex> node_init_set = node_clamped_set;
+    set<Tree::NodeIndex> node_init_set = node_clamped_set;
     if (node_clamped_set.count(GetTree().root()) == 0) { node_init_set.insert(GetTree().root()); }
     for (Tree::NodeIndex const &node_init : node_init_set) {
-        std::set<Tree::NodeIndex> internal_node_set{};
-        std::set<Tree::NodeIndex> frontier_node_set{};
-        std::unordered_map<Tree::NodeIndex, double> distance{{node_init, 0.0}};
+        vector<Tree::NodeIndex> internal_nodes{};
+        vector<Tree::NodeIndex> frontier_nodes{};
+        unordered_map<Tree::NodeIndex, double> distance{{node_init, 0.0}};
 
-        std::queue<Tree::NodeIndex> bfs_queue{};
+        queue<Tree::NodeIndex> bfs_queue{};
         bfs_queue.push(node_init);
         while (!bfs_queue.empty()) {
             Tree::NodeIndex node_bfs = bfs_queue.front();
             bfs_queue.pop();
             if ((node_clamped_set.count(node_bfs) == 1 and node_bfs != node_init) or
                 GetTree().is_leaf(node_bfs)) {
-                frontier_node_set.insert(node_bfs);
+                frontier_nodes.push_back(node_bfs);
             } else {
-                if (node_bfs != node_init) { internal_node_set.insert(node_bfs); }
+                if (node_bfs != node_init) { internal_nodes.push_back(node_bfs); }
                 for (Tree::NodeIndex child : GetTree().children(node_bfs)) {
                     distance[child] = distance[node_bfs] + 1;
                     bfs_queue.push(child);
@@ -100,38 +100,37 @@ NodeAges::NodeAges(const Tree &intree, const string &fossilsfile)
         }
 
         // Update the partial subtree (until the clamped frontier)
-        double min_delta_t = std::numeric_limits<double>::infinity();
-        for (Tree::NodeIndex const &frontier_node : frontier_node_set) {
+        double min_delta_t = numeric_limits<double>::infinity();
+        for (Tree::NodeIndex const &frontier_node : frontier_nodes) {
             double frontier_age =
                 node_clamped_set.count(frontier_node) == 1 ? clamped_ages[frontier_node] : 0.0;
-            double delta_t = (clamped_ages[node_init] - frontier_age) / distance[frontier_node];
+            assert(GetVal(node_init) > 0.0);
+            double delta_t = (GetVal(node_init) - frontier_age) / distance[frontier_node];
+            assert(delta_t > 0);
             if (delta_t < min_delta_t) { min_delta_t = delta_t; }
         }
 
-        for (Tree::NodeIndex const &internal_node : internal_node_set) {
-            assert((*this)[GetTree().parent(internal_node)] != 0.0);
-            (*this)[internal_node] = (*this)[GetTree().parent(internal_node)] - min_delta_t;
-            assert((*this)[internal_node] > 0.0);
+        for (Tree::NodeIndex const &internal_node : internal_nodes) {
+            auto parent = GetTree().parent(internal_node);
+            (*this)[internal_node] = GetVal(parent) - min_delta_t;
+            assert(GetVal(parent) > 0.0);
+            assert(GetVal(internal_node) > 0.0);
+            assert(GetVal(parent) > GetVal(internal_node));
         }
     }
     assert(Check());
 }
 
-double NodeAges::EccentricityRecursive(Tree::NodeIndex node) {
-    if (GetTree().is_leaf(node)) {
-        // set leaf nodes at age 0
-        (*this)[node] = 0.0;
-    } else {
+double NodeAges::EccentricityRecursive(Tree::NodeIndex node) const {
+    double max_eccent = 0.0;
+    if (!GetTree().is_leaf(node)) {
         // proceed from leaves to root using recursive algorithm
-        double max_eccent = 0.0;
         for (auto const &child : GetTree().children(node)) {
             double eccent = EccentricityRecursive(child) + 1.0;
             if (eccent > max_eccent) { max_eccent = eccent; }
         }
-
-        (*this)[node] = max_eccent;
     }
-    return GetVal(node);
+    return max_eccent;
 }
 
 bool NodeAges::Check() const {
@@ -142,7 +141,7 @@ bool NodeAges::Check() const {
             } else {
                 assert(GetVal(node) != 0.0);
             }
-            assert(GetVal(GetTree().parent(node)) >= GetVal(node));
+            assert(GetVal(GetTree().parent(node)) > GetVal(node));
         }
     }
     return true;
@@ -161,8 +160,11 @@ void NodeAges::SlidingMove(Tree::NodeIndex node, double scale) {
         if (p < upper_bound) { upper_bound = p; }
     }
 
-    assert(upper_bound >= GetVal(node));
-    assert(GetVal(node) >= lower_bound);
+    if (upper_bound < GetVal(node) or lower_bound > GetVal(node)) {
+        cerr << "Error node : " << GetTree().node_name(node) << ". Age is  " << node
+             << ", lower bound is " << lower_bound << " and upper bound is " << upper_bound << '.'
+             << endl;
+    }
     if (upper_bound == lower_bound) { return; }
 
     double x = GetVal(node) + scale * (upper_bound - lower_bound);
