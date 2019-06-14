@@ -8,6 +8,7 @@
 #include "TaxonTraits.hpp"
 
 static int dim_pop_size = 0;
+static int dim_omega = 0;
 static int dim_mut_rate = 1;
 static int dim_gen_time = 2;
 
@@ -90,6 +91,8 @@ class NodeProcess {
     const Tree &GetTree() const;
 
     double GetVal(Tree::NodeIndex node) const;
+    double GetExpVal(Tree::NodeIndex node) const;
+
     double &operator[](Tree::NodeIndex node);
 
     void SlidingMove(Tree::NodeIndex node, double m);

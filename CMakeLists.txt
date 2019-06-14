@@ -66,6 +66,14 @@ set(BASE_LIBS
 add_executable(globom "src/SingleOmega.cpp")
 target_link_libraries(globom ${BASE_LIBS})
 
+# Node omega (nodeomega)
+add_executable(nodeomegamutsel "src/DatedNodeOmega.cpp")
+target_link_libraries(nodeomegamutsel bayescode_lib tree_lib)
+
+# Read Node omega (readnodeomega)
+add_executable(readnodeomegamutsel "src/ReadDatedNodeOmega.cpp")
+target_link_libraries(readnodeomegamutsel bayescode_lib tree_lib)
+
 # Node Ne mutsel (nodemutsel)
 add_executable(nodemutsel "src/DatedNodeMutSel.cpp")
 target_link_libraries(nodemutsel bayescode_lib tree_lib)

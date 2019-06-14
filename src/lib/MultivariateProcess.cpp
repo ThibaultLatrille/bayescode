@@ -57,6 +57,10 @@ double NodeProcess::GetVal(Tree::NodeIndex node) const {
     return node_multivariate.GetVal(node)(dimension);
 }
 
+double NodeProcess::GetExpVal(Tree::NodeIndex node) const {
+    return exp(GetVal(node));
+}
+
 double &NodeProcess::operator[](Tree::NodeIndex node) { return node_multivariate[node](dimension); }
 
 void NodeProcess::SlidingMove(Tree::NodeIndex node, double m) {

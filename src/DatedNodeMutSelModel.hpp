@@ -687,15 +687,15 @@ class DatedNodeMutSelModel : public ChainComponent {
     int GetDimension() const { return dimensions; }
 
     std::string GetDimensionName(int dim) const {
-        if (dim == 0) {
+        if (dim == dim_pop_size) {
             return "LogPopulationSize";
-        } else if (dim == 1) {
+        } else if (dim == dim_mut_rate) {
             if (PolymorphismAware()) {
                 return "LogMutationRatePerGeneration";
             } else {
                 return "LogMutationRatePerTime";
             }
-        } else if (dim == 2 and PolymorphismAware()) {
+        } else if (dim == dim_gen_time and PolymorphismAware()) {
             return "LogGenerationTime";
         } else {
             assert(taxon_traits != nullptr);

@@ -94,11 +94,15 @@ run-app-tests: all
 	_build/readmutselomega _test/mutselomega_gal4
 	@echo "\n\e[35m\e[1m== Diffsel double sparse ====================================================\e[0m"
 	@make --no-print-directory diffseldsparse
-	@echo "\n\e[35m\e[1m== Dated MutSel run =========================================================\e[0m"
+	@echo "\n\e[35m\e[1m== Node Omega run ===========================================================\e[0m"
+	_build/nodeomega -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/nodeomega_gal4
+	@echo "\n\e[35m\e[1m== Node Omega restart =======================================================\e[0m"
+	_build/nodeomega _test/nodeomega_gal4
+	@echo "\n\e[35m\e[1m== Node MutSel run ==========================================================\e[0m"
 	_build/nodemutsel --ncat 3 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/nodemutsel_gal4
-	@echo "\n\e[35m\e[1m== Dated MutSel restart =====================================================\e[0m"
+	@echo "\n\e[35m\e[1m== Node MutSel restart ======================================================\e[0m"
 	_build/nodemutsel _test/nodemutsel_gal4
-	@echo "\n\e[35m\e[1m== Dated MutSel read ========================================================\e[0m"
+	@echo "\n\e[35m\e[1m== Node MutSel read =========================================================\e[0m"
 	_build/readnodemutsel --ss _test/nodemutsel_gal4
 
 # @make --no-print-directory run-multigeneglobom-test
