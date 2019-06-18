@@ -912,26 +912,30 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         UpdateMatrices();
         phyloprocess->Move(frac);
         CheckMapping();
+        assert(CheckMapping());
     }
 
-    void CheckMapping() const {
+    bool CheckMapping() const {
         for (int taxon = 0; taxon < Ntaxa; taxon++) {
             for (int site = 0; site < Nsite; site++) {
                 int sub_state = phyloprocess->GetPathState(taxon, site);
                 int data_state = codondata->GetState(taxon, site);
+                if (data_state == -1) { continue; }
                 std::vector<int> path_state_neighbors =
-                    codondata->GetCodonStateSpace()->GetNeighbors(sub_state);
+                        codondata->GetCodonStateSpace()->GetNeighbors(sub_state);
                 auto find_data_in_sub_neighbor =
-                    find(path_state_neighbors.begin(), path_state_neighbors.end(), data_state);
+                        find(path_state_neighbors.begin(), path_state_neighbors.end(), data_state);
                 bool data_sub_not_neighbors =
-                    (find_data_in_sub_neighbor == path_state_neighbors.end());
+                        (find_data_in_sub_neighbor == path_state_neighbors.end());
                 if (sub_state != data_state and data_sub_not_neighbors) {
                     std::cerr << "Substitution mapping final state is not even a neighbor of "
                                  "the state given by the alignment"
                               << std::endl;
+                    return false;
                 }
             }
         }
+        return true;
     }
 
     //! complete series of MCMC moves on all parameters (repeated nrep times)

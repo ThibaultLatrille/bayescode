@@ -210,7 +210,7 @@ class DatedNodeOmegaModel : public ChainComponent {
         model_stat(info, "blengthvar", [&]() { return branchlength->GetVar(); });
         for (int i = 0; i < dimension; i++) {
             for (int j = 0; j <= i; j++) {
-                model_stat(info, "cov_" + std::to_string(i) + "_" + std::to_string(j),
+                model_stat(info, "Precision_" + std::to_string(i) + "_" + std::to_string(j),
                     precision_matrix.coeffRef(i, j));
             }
         }

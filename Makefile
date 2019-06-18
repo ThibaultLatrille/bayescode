@@ -95,9 +95,9 @@ run-app-tests: all
 	@echo "\n\e[35m\e[1m== Diffsel double sparse ====================================================\e[0m"
 	@make --no-print-directory diffseldsparse
 	@echo "\n\e[35m\e[1m== Node Omega run ===========================================================\e[0m"
-	_build/nodeomega -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/nodeomega_gal4
+	_build/nodeomegamutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/nodeomega_gal4
 	@echo "\n\e[35m\e[1m== Node Omega restart =======================================================\e[0m"
-	_build/nodeomega _test/nodeomega_gal4
+	_build/nodeomegamutsel _test/nodeomega_gal4
 	@echo "\n\e[35m\e[1m== Node MutSel run ==========================================================\e[0m"
 	_build/nodemutsel --ncat 3 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/nodemutsel_gal4
 	@echo "\n\e[35m\e[1m== Node MutSel restart ======================================================\e[0m"

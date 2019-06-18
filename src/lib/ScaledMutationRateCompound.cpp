@@ -13,7 +13,7 @@ double NodeProcessScaledMutationRate::GetTheta(int taxon) const {
 
 double NodeProcessScaledMutationRate::GetNodeTheta(Tree::NodeIndex node) const {
     assert(node_rates->GetTree().is_leaf(node));
-    return 4 * theta_scale * exp(node_rates->GetVal(node) + node_popsize->GetVal(node));
+    return theta_scale * exp(node_rates->GetVal(node) + node_popsize->GetVal(node));
 }
 
 void NodeProcessScaledMutationRate::Update() {

@@ -142,6 +142,8 @@ bool NodeAges::Check() const {
                 assert(GetVal(node) != 0.0);
             }
             assert(GetVal(GetTree().parent(node)) > GetVal(node));
+        } else {
+            assert(GetVal(node) != 0.0);
         }
     }
     return true;
@@ -154,20 +156,28 @@ void NodeAges::SlidingMove(Tree::NodeIndex node, double scale) {
     for (auto const &child : GetTree().children(node)) {
         if (GetVal(child) > lower_bound) { lower_bound = GetVal(child); }
     }
-    double upper_bound = node_clamped_set.count(node) == 1 ? clamped_upper_bound[node] : 1.0;
+    double upper_bound = node_clamped_set.count(node) == 1
+                             ? clamped_upper_bound[node]
+                             : std::numeric_limits<double>::infinity();
     if (!GetTree().is_root(node)) {
         double p = GetVal(GetTree().parent(node));
         if (p < upper_bound) { upper_bound = p; }
     }
 
     if (upper_bound < GetVal(node) or lower_bound > GetVal(node)) {
-        cerr << "Error node : " << GetTree().node_name(node) << ". Age is  " << node
+        cerr << "Error node : " << GetTree().node_name(node) << ". Age is " << node
              << ", lower bound is " << lower_bound << " and upper bound is " << upper_bound << '.'
              << endl;
     }
     if (upper_bound == lower_bound) { return; }
 
-    double x = GetVal(node) + scale * (upper_bound - lower_bound);
+    double x = GetVal(node);
+    if (std::isinf(upper_bound)) {
+        assert(lower_bound != 0.0);
+        x += scale * lower_bound;
+    } else {
+        x += scale * (upper_bound - lower_bound);
+    }
 
     while ((x < lower_bound) || (x > upper_bound)) {
         if (x < lower_bound) { x = 2 * lower_bound - x; }
