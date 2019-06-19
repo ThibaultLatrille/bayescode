@@ -353,7 +353,6 @@ class DatedNodeOmegaModel : public ChainComponent {
         branchomega->UpdateLocal(node);
         UpdateBranchOmega(node);
         for (Tree::NodeIndex const &child : tree->children(node)) { UpdateBranchOmega(child); }
-
     }
 
     //! \brief global update function (includes the stochastic mapping of
@@ -650,7 +649,7 @@ class DatedNodeOmegaModel : public ChainComponent {
     void MoveNodeOmega(double tuning, int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node : tree->root_to_leaves_iter()) {
-                if (!tree->is_root(node)) { MoveNodeOmega(node, tuning); }
+                MoveNodeOmega(node, tuning);
             }
         }
     }
