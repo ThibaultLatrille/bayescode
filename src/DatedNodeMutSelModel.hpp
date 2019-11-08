@@ -671,6 +671,12 @@ class DatedNodeMutSelModel : public ChainComponent {
         return branchlength->GetVal(tree->branch_index(node));
     };
 
+    //! return contrast for a given node and dimension
+    double GetContrast(Tree::NodeIndex node, int dim) const {
+        assert(!tree->is_root(node));
+        return node_multivariate->GetContrast(node)(dim);
+    };
+
     //! return true if the model handles polymorphism
     bool PolymorphismAware() const { return polymorphism_aware; };
 

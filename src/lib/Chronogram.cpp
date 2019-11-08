@@ -118,7 +118,7 @@ NodeAges::NodeAges(const Tree &intree, const string &fossilsfile)
             assert(GetVal(parent) > GetVal(internal_node));
         }
     }
-    assert(Check());
+    Check();
 }
 
 double NodeAges::EccentricityRecursive(Tree::NodeIndex node) const {
@@ -135,15 +135,30 @@ double NodeAges::EccentricityRecursive(Tree::NodeIndex node) const {
 
 bool NodeAges::Check() const {
     for (auto const &node : GetTree().root_to_leaves_iter()) {
+        auto name = GetTree().node_name(node);
         if (!GetTree().is_root(node)) {
             if (GetTree().is_leaf(node)) {
-                assert(GetVal(node) == 0.0);
+                if (GetVal(node) != 0.0) {
+                    cerr << "The age of the leaf" << name << " is not 0." << endl;
+                }
             } else {
-                assert(GetVal(node) != 0.0);
+                if (GetVal(node) == 0.0) {
+                    cerr << "The age of the internal node " << name << " is 0." << endl;
+                    exit(1);
+                }
             }
-            assert(GetVal(GetTree().parent(node)) > GetVal(node));
+            auto p = GetTree().parent(node);
+            if (GetVal(p) <= GetVal(node)) {
+                cerr << "The node " << name << " is older (age=" << GetVal(node)
+                     << ") than it's parent node " << GetTree().node_name(p)
+                     << " (age=" << GetVal(p) << ")." << endl;
+                exit(1);
+            }
         } else {
-            assert(GetVal(node) != 0.0);
+            if (GetVal(node) == 0.0) {
+                cerr << "The age of root " << name << " is 0." << endl;
+                exit(1);
+            }
         }
     }
     return true;
@@ -214,4 +229,5 @@ void Chronogram::UpdateLocal(Tree::NodeIndex node) {
 void Chronogram::UpdateBranch(Tree::NodeIndex parent, Tree::NodeIndex node) {
     (*this)[GetTree().branch_index(node)] =
         (nodeages.GetVal(parent) - nodeages.GetVal(node)) / nodeages.GetVal(GetTree().root());
+    assert((*this)[GetTree().branch_index(node)] > 0);
 }

@@ -17,6 +17,8 @@ class TaxonTraits {
         std::ifstream input_stream{filename};
         if (!input_stream) {
             std::cerr << "Traits file " << filename << " doesn't exist" << std::endl;
+        } else {
+            std::cout << "Opening traits file " << filename << "." << std::endl;
         }
 
         std::string line;
@@ -51,7 +53,12 @@ class TaxonTraits {
             std::istringstream line_stream(line);
             std::string taxon{};
             getline(line_stream, taxon, sep);
-            if (!taxon_set.TaxonPresent(taxon)) { continue; }
+            if (!taxon_set.TaxonPresent(taxon)) {
+                std::cerr << "Taxon " << taxon
+                          << " found in traits file was not found in the alignment (skipping line)."
+                          << std::endl;
+                continue;
+            }
             int id = taxon_set.GetTaxonIndex(taxon);
             taxon_presence.at(id) = true;
             if (!header.empty()) {
@@ -74,6 +81,15 @@ class TaxonTraits {
                 if (counter != gentime_dim) { dim_counter++; }
                 counter++;
             }
+        }
+        int nbr_presence{0};
+        for (bool p : taxon_presence) { nbr_presence += p; }
+        if (nbr_presence == 0) {
+            std::cerr << "No taxa was found in trait file. Either it is empty or the names don't "
+                         "match the names in the alignment."
+                      << std::endl;
+        } else {
+            std::cerr  << nbr_presence << " taxa found in trait file matched name the alignment." << std::endl;
         }
         assert(polymorphism_aware == gentime);
     }

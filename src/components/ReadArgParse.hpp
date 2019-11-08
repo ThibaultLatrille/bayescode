@@ -7,15 +7,17 @@
 class ReadArgParse {
   protected:
     TCLAP::CmdLine& cmd;
+    int until{-1};
+    int burnin{-1};
 
   public:
     explicit ReadArgParse(TCLAP::CmdLine& cmd) : cmd{cmd} {}
 
     TCLAP::ValueArg<int> every{
         "e", "every", "Number of iterations between two traces", false, 1, "int", cmd};
-    TCLAP::ValueArg<int> until{"u", "until",
+    TCLAP::ValueArg<int> until_input{"u", "until",
         "Maximum number of (saved) iterations (-1 means unlimited)", false, -1, "int", cmd};
-    TCLAP::ValueArg<int> burnin{
+    TCLAP::ValueArg<int> burnin_input{
         "b", "burnin", "Number of iterations for burnin", false, 0, "int", cmd};
     TCLAP::SwitchArg ppred{"p", "ppred",
         "For each point of the chain (after burn-in), produces a data replicate simulated "
@@ -28,22 +30,34 @@ class ReadArgParse {
 
     bool GetPpred() { return ppred.getValue(); }
 
-    int GetBurnIn() { return burnin.getValue(); }
+    int GetBurnIn() {
+        if (burnin == -1) {
+            if (int((GetUntil() - burnin_input.getValue()) / GetEvery()) < 1) {
+                std::cerr << "Burn-in was set to " << burnin_input.getValue()
+                          << " but there is only " << GetUntil() << "  points to read.\n";
+                burnin = std::max(GetUntil() - 10 * GetEvery(), 0);
+                std::cerr << "Setting the burn-in to " << burnin << std::endl;
+            } else {
+                burnin = burnin_input.getValue();
+            }
+        }
+        return burnin;
+    }
 
     int GetEvery() { return every.getValue(); }
 
     int GetSize() { return (GetUntil() - GetBurnIn()) / GetEvery(); }
 
     int GetUntil() {
-        int until_value{until.getValue()};
-        if (until_value == -1) {
+        if (until == -1) {
             std::ifstream trace{GetChainName() + ".trace"};
             std::string line;
             while (std::getline(trace, line)) {
-                if (line != "\n") { until_value++; }
+                if (line != "\n") { until++; }
             }
+            if (until_input.getValue() != -1) { until = std::min(until, until_input.getValue()); }
+            assert(until > 0);
         }
-        assert(until_value > 0);
-        return until_value;
+        return until;
     }
 };

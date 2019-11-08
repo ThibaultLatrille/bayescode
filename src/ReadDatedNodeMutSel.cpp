@@ -120,6 +120,7 @@ int main(int argc, char *argv[]) {
         vector<vector<double>> branch_times(model->GetTree().nb_nodes());
         vector<vector<double>> log10_branch_length(model->GetTree().nb_nodes());
         vector<vector<double>> log10_leaves_theta(model->GetTree().nb_nodes());
+        vector<vector<double>> contrast_pop_size(model->GetTree().nb_nodes());
 
         for (int dim{0}; dim < model->GetDimension(); dim++) {
             dim_node_traces[dim].resize(model->GetTree().nb_nodes());
@@ -138,6 +139,7 @@ int main(int argc, char *argv[]) {
                     assert(branch_time <= 1);
                     branch_times[node].push_back(branch_time);
                     log10_branch_length[node].push_back(log10(model->GetBranchLength(node)));
+                    contrast_pop_size[node].push_back(model->GetContrast(node, dim_pop_size));
                 }
                 if (model->PolymorphismAware() and model->GetTree().is_leaf(node)) {
                     log10_leaves_theta[node].push_back(log10(model->GetTheta(node)));
@@ -157,6 +159,8 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        export_tree(base_export_tree, "ContrastPopulationSize", read_args.GetChainName(),
+            contrast_pop_size);
         export_tree(
             base_export_tree, "Log10BranchLength", read_args.GetChainName(), log10_branch_length);
         export_tree(base_export_tree, "BranchTime", read_args.GetChainName(), branch_times);
