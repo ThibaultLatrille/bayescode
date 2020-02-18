@@ -23,6 +23,7 @@ class ReadArgParse {
         "For each point of the chain (after burn-in), produces a data replicate simulated "
         "from the posterior predictive distribution",
         cmd};
+    TCLAP::SwitchArg trace{"", "trace", "Recompute the trace.", cmd};
     TCLAP::UnlabeledValueArg<std::string> chain_name{
         "chain_name", "Chain name (output file prefix)", true, "chain", "string", cmd};
 

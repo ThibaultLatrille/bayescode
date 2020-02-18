@@ -339,10 +339,14 @@ class MultiDirichlet : public SimpleArray<std::vector<double>> {
         }
     }
 
+    //! get mean entropy for a specific element of the array
+    double GetMeanEntropy(int i) const {
+        return Random::GetEntropy(GetVal(i));
+    }
     //! get mean entropy over all elements of the array
     double GetMeanEntropy() const {
         double mean = 0;
-        for (int i = 0; i < GetSize(); i++) { mean += Random::GetEntropy(GetVal(i)); }
+        for (int i = 0; i < GetSize(); i++) { mean += GetMeanEntropy(i); }
         mean /= GetSize();
         return mean;
     }

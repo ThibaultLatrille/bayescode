@@ -360,7 +360,6 @@ class DatedNodeOmegaModel : public ChainComponent {
     void Update() {
         UpdateBranches();
         TouchMatrices();
-        ResampleSub(1.0);
     }
 
     //-------------------
@@ -370,8 +369,7 @@ class DatedNodeOmegaModel : public ChainComponent {
     //! \brief post pred function (does the update of all fields before doing the
     //! simulation)
     void PostPred(std::string name) {
-        UpdateBranches();
-        TouchMatrices();
+        Update();
         phyloprocess->PostPredSample(name);
     }
 

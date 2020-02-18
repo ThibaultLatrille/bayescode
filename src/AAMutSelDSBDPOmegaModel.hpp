@@ -230,7 +230,6 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
           dposomhypermean(indposomhypermean),
           dposomhyperinvshape(indposomhyperinvshape) {
         init();
-        Update();
     }
 
     virtual ~AAMutSelDSBDPOmegaModel() = default;
@@ -645,13 +644,10 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
         UpdateBaseOccupancies();
         UpdateOccupancies();
         UpdateMatrices();
-        ResampleSub(1.0);
     }
 
     void PostPred(std::string name) {
-        UpdateBaseOccupancies();
-        UpdateOccupancies();
-        UpdateMatrices();
+        Update();
         phyloprocess->PostPredSample(name);
     }
 
@@ -922,11 +918,11 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
                 int data_state = codondata->GetState(taxon, site);
                 if (data_state == -1) { continue; }
                 std::vector<int> path_state_neighbors =
-                        codondata->GetCodonStateSpace()->GetNeighbors(sub_state);
+                    codondata->GetCodonStateSpace()->GetNeighbors(sub_state);
                 auto find_data_in_sub_neighbor =
-                        find(path_state_neighbors.begin(), path_state_neighbors.end(), data_state);
+                    find(path_state_neighbors.begin(), path_state_neighbors.end(), data_state);
                 bool data_sub_not_neighbors =
-                        (find_data_in_sub_neighbor == path_state_neighbors.end());
+                    (find_data_in_sub_neighbor == path_state_neighbors.end());
                 if (sub_state != data_state and data_sub_not_neighbors) {
                     std::cerr << "Substitution mapping final state is not even a neighbor of "
                                  "the state given by the alignment"
@@ -1517,7 +1513,15 @@ class AAMutSelDSBDPOmegaModel : public ChainComponent {
     }
 
     //! return mean entropy of amino-acd fitness profiles
-    double GetMeanAAEntropy() const { return componentaafitnessarray->GetMeanEntropy(); }
+    double GetMeanAAEntropy() const {
+        double aaent = 0;
+        for (int k = 0; k < Ncat; k++) {
+            if (occupancy->GetVal(k)) {
+                aaent += occupancy->GetVal(k) * componentaafitnessarray->GetMeanEntropy(k);
+            }
+        }
+        return aaent / GetNsite();
+    }
 
     //! return mean of concentration parameters of base distribution
     double GetMeanComponentAAConcentration() const {

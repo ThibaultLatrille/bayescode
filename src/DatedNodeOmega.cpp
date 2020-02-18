@@ -42,7 +42,8 @@ int main(int argc, char *argv[]) {
             args.traitsfile.getValue(), args.fossils.getValue());
         model->Update();
     }
-
+    model->ResampleSub(1.0);
+    model->MoveParameters(10);
     ConsoleLogger console_logger;
     ChainCheckpoint chain_checkpoint(cmd.chain_name() + ".param", *chain_driver, *model);
     StandardTracer trace(*model, cmd.chain_name());

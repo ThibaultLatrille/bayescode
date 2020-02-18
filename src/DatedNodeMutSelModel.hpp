@@ -1877,7 +1877,15 @@ class DatedNodeMutSelModel : public ChainComponent {
     }
 
     //! return mean entropy of amino-acd fitness profiles
-    double GetMeanAAEntropy() const { return componentaafitnessarray->GetMeanEntropy(); }
+    double GetMeanAAEntropy() const {
+        double aaent = 0;
+        for (int k = 0; k < Ncat; k++) {
+            if (occupancy->GetVal(k)) {
+                aaent += occupancy->GetVal(k) * componentaafitnessarray->GetMeanEntropy(k);
+            }
+        }
+        return aaent / GetNsite();
+    }
 
     //! return mean of concentration parameters of base distribution
     double GetMeanComponentAAConcentration() const {

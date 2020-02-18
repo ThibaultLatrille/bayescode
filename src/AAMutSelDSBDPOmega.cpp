@@ -81,8 +81,10 @@ int main(int argc, char *argv[]) {
             aamutsel_args.dposomhyperinvshape.getValue(), aamutsel_args.ncat.getValue(),
             aamutsel_args.basencat.getValue(), aamutsel_args.polymorphism_aware.getValue(),
             aamutsel_args.precision.getValue());
+        model->Update();
     }
-
+    model->ResampleSub(1.0);
+    model->MoveParameters(10);
     ConsoleLogger console_logger;
     ChainCheckpoint chain_checkpoint(cmd.chain_name() + ".param", *chain_driver, *model);
     StandardTracer trace(*model, cmd.chain_name());

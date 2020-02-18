@@ -24,7 +24,6 @@ class ReadNodeOmegaArgParse : public ReadArgParse {
     SwitchArg newick{"t", "newick",
         "Computes the mean posterior node-specific entries of the multivariate Brownian process",
         cmd};
-
 };
 
 void export_tree(ExportTree export_tree, string const &name, string const &path,
@@ -75,6 +74,8 @@ int main(int argc, char *argv[]) {
             model->PostPred("ppred_" + chain_name + "_" + to_string(i) + ".ali");
         }
         cerr << '\n';
+    } else if (read_args.trace.getValue()) {
+        recompute_trace<DatedNodeOmegaModel>(*model, cr, chain_name, every, size);
     } else if (read_args.newick.getValue()) {
         vector<vector<vector<double>>> dim_node_traces(model->GetDimension());
         vector<vector<double>> branch_times(model->GetTree().nb_nodes());

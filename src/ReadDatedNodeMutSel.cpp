@@ -89,6 +89,8 @@ int main(int argc, char *argv[]) {
             model->PostPred("ppred_" + chain_name + "_" + to_string(i) + ".ali");
         }
         cerr << '\n';
+    } else if (read_args.trace.getValue()) {
+        recompute_trace<DatedNodeMutSelModel>(*model, cr, chain_name, every, size);
     } else if (read_args.ss.getValue()) {
         vector<vector<double>> sitestat(model->GetNsite(), {0});
 

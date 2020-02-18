@@ -14,8 +14,8 @@ class ReadAAMutSelDSBDPOmegaArgParse : public ReadArgParse {
   public:
     explicit ReadAAMutSelDSBDPOmegaArgParse(CmdLine &cmd) : ReadArgParse(cmd) {}
     TCLAP::ValueArg<string> profiles{"o", "profiles",
-                                     "Output profiles name if desired (otherwise given by {chain_name}.siteprofiles)", false, "",
-                                     "string", cmd};
+        "Output profiles name if desired (otherwise given by {chain_name}.siteprofiles)", false, "",
+        "string", cmd};
     SwitchArg ss{
         "s", "ss", "Computes the mean posterior site-specific state equilibrium frequencies", cmd};
 
@@ -53,6 +53,8 @@ int main(int argc, char *argv[]) {
             model.PostPred("ppred_" + chain_name + "_" + std::to_string(i) + ".ali");
         }
         cerr << '\n';
+    } else if (read_args.trace.getValue()) {
+        recompute_trace<AAMutSelDSBDPOmegaModel>(model, cr, chain_name, every, size);
     } else if (read_args.ss.getValue()) {
         std::vector<std::vector<double>> sitestat(model.GetNsite(), {0});
 
