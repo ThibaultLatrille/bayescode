@@ -46,11 +46,12 @@ class DatedNodeOmegaModel : public ChainComponent {
     // Chronogram (diff between node ages)
     Chronogram *chronogram;
 
-    int dimension;
-    int invert_whishart_df;
-    double invert_whishart_kappa;
-    // Covariance matrix
-    EMatrix precision_matrix;
+    // Precision matrix and prior
+    int dimensions;
+    int prior_cov_df;
+    bool uniq_kappa;
+    PriorCovariance *prior_matrix;
+    PrecisionMatrix *precision_matrix;
     NodeMultivariateProcess *node_multivariate;
 
     // Branch rates (brownian process)
@@ -111,11 +112,13 @@ class DatedNodeOmegaModel : public ChainComponent {
     //! Note: in itself, the constructor does not allocate the model;
     //! It only reads the data and tree file and register them together.
     DatedNodeOmegaModel(std::string indatafile, std::string intreefile, std::string intraitsfile,
-        std::string infossilsfile)
+        std::string infossilsfile, int inprior_cov_df, bool inuniq_kappa)
         : datafile(std::move(indatafile)),
           treefile(std::move(intreefile)),
           traitsfile(std::move(intraitsfile)),
-          fossilsfile(std::move(infossilsfile)) {
+          fossilsfile(std::move(infossilsfile)),
+          prior_cov_df{inprior_cov_df},
+          uniq_kappa{inuniq_kappa} {
         data = new FileSequenceAlignment(datafile);
         codondata = new CodonSequenceAlignment(data, true);
 
@@ -137,13 +140,12 @@ class DatedNodeOmegaModel : public ChainComponent {
         // Chronogram (diff between node ages)
         chronogram = new Chronogram(*nodeages);
 
-        dimension = 2;
-        if (taxon_traits != nullptr) { dimension += taxon_traits->GetDim(); }
-        invert_whishart_df = dimension + 1;
-        invert_whishart_kappa = 1.0;
-        precision_matrix = EMatrix::Identity(dimension, dimension) * 10;
+        dimensions = 2;
+        if (taxon_traits != nullptr) { dimensions += taxon_traits->GetDim(); }
+        prior_matrix = new PriorCovariance(dimensions, prior_cov_df, uniq_kappa);
+        precision_matrix = new PrecisionMatrix(*prior_matrix);
 
-        node_multivariate = new NodeMultivariateProcess(*chronogram, precision_matrix, dimension);
+        node_multivariate = new NodeMultivariateProcess(*chronogram, *precision_matrix, dimensions);
 
         // Branch omega (brownian process)
         nodeomega = new NodeProcess(*node_multivariate, dim_omega);
@@ -200,20 +202,30 @@ class DatedNodeOmegaModel : public ChainComponent {
         model_node(info, "nucrelrate", nucrelrate);
         model_node(info, "nodeages", *nodeages);
         model_node(info, "node_multivariate", *node_multivariate);
-        model_node(info, "covmatrix", precision_matrix);
-        model_node(info, "invert_whishart_kappa", invert_whishart_kappa);
-        model_node(info, "invert_whishart_df", invert_whishart_df);
+        model_node(info, "prior_cov_matrix", *prior_matrix);
+        model_node(info, "precision_matrix", *precision_matrix);
 
         model_stat(info, "logprior", [&]() { return DatedNodeOmegaModel::GetLogPrior(); });
         model_stat(info, "lnL", [&]() { return DatedNodeOmegaModel::GetLogLikelihood(); });
         model_stat(info, "blengthmean", [&]() { return branchlength->GetMean(); });
         model_stat(info, "blengthvar", [&]() { return branchlength->GetVar(); });
-        for (int i = 0; i < dimension; i++) {
+        for (int i = 0; i < dimensions; i++) {
+            model_stat(info, "PriorCovariance_" + std::to_string(i), prior_matrix->coeffRef(i));
             for (int j = 0; j <= i; j++) {
                 model_stat(info, "Precision_" + std::to_string(i) + "_" + std::to_string(j),
-                    precision_matrix.coeffRef(i, j));
+                    precision_matrix->coeffRef(i, j));
             }
         }
+        // Descriptive statistics - for each branch of the tree
+        for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
+            string b_name = tree->node_name(tree->node_index(branch));
+            model_stat(info, "*BranchTime_" + b_name, (*chronogram)[branch]);
+            model_stat(info, "*BranchMutRate_" + b_name, (*branchrates)[branch]);
+            model_stat(info, "*BranchLength_" + b_name, (*branchlength)[branch]);
+            model_stat(info, "*BranchdNdS_" + b_name, (*branchomega)[branch]);
+        }
+
+        model_stat(info, "PredictedDNDS", [this]() { return branchomega->GetMean(); });
         model_stat(info, "statent", [&]() { return Random::GetEntropy(nucstat); });
         model_stat(info, "rrent", [&]() { return Random::GetEntropy(nucrelrate); });
     }
@@ -245,20 +257,20 @@ class DatedNodeOmegaModel : public ChainComponent {
         return branchlength->GetVal(tree->branch_index(node));
     };
 
-    //! return the value of the multivariate brownian process for a given node and a given dimension
-    //! of the process
+    //! return the value of the multivariate brownian process for a given node and a given
+    //! dimensions of the process
     double GetBrownianEntry(Tree::NodeIndex node, int dim) const {
         return node_multivariate->GetVal(node)(dim);
     }
 
     //! return number of dimensions of the multivariate brownian process
-    int GetDimension() const { return dimension; }
+    int GetDimension() const { return dimensions; }
 
     std::string GetDimensionName(int dim) const {
         if (dim == dim_omega) {
-            return "LogOmega";
+            return "Omega";
         } else if (dim == dim_mut_rate) {
-            return "LogMutationRatePerTime";
+            return "MutationRatePerTime";
         } else {
             assert(taxon_traits != nullptr);
             return "Traits" + taxon_traits->GetHeader(dim);
@@ -381,7 +393,7 @@ class DatedNodeOmegaModel : public ChainComponent {
     //!
     //! Note: up to some multiplicative constant
     double GetLogPrior() const {
-        double total = 0;
+        double total = PrecisionMatrixLogProb();
         total += NodeMultivariateLogPrior();
         total += NucRatesLogPrior();
         return total;
@@ -394,7 +406,10 @@ class DatedNodeOmegaModel : public ChainComponent {
     //! return joint log prob (log prior + log likelihood)
     double GetLogProb() const { return GetLogPrior() + GetLogLikelihood(); }
 
-    // Multivariate prior
+    //! log prob of precision matrix
+    double PrecisionMatrixLogProb() const {
+        return prior_matrix->GetLogProb() + precision_matrix->GetLogProb(*prior_matrix);
+    }
 
     //! log prior over branch rates (brownian process)
     double NodeMultivariateLogPrior() const { return node_multivariate->GetLogProb(); }
@@ -581,14 +596,37 @@ class DatedNodeOmegaModel : public ChainComponent {
 
             CollectScatterSuffStat();
             SamplePrecisionMatrix();
+            MovePriorMatrix(0.1, 3);
+            MovePriorMatrix(0.01, 3);
             TouchMatrices();
         }
     }
 
     void SamplePrecisionMatrix() {
-        scattersuffstat->SamplePrecisionMatrix(
-            precision_matrix, invert_whishart_df, invert_whishart_kappa);
+        scattersuffstat->SamplePrecisionMatrix(*precision_matrix, *prior_matrix);
     };
+
+    //! MH moves on the invert wishart matrix (prior of the covariance matrix)
+    void MovePriorMatrix(double tuning, int nrep) {
+        if (uniq_kappa) {
+            for (int rep = 0; rep < nrep; rep++) {
+                double deltalogprob = -PrecisionMatrixLogProb();
+                double m = tuning * (Random::Uniform() - 0.5);
+                double e = exp(m);
+                (*prior_matrix) *= e;
+                deltalogprob += PrecisionMatrixLogProb();
+                deltalogprob += m;
+                int accepted = (log(Random::Uniform()) < deltalogprob);
+                if (!accepted) { (*prior_matrix) /= e; }
+            }
+        } else {
+            for (int i = 0; i < dimensions; ++i) {
+                Move::Scaling((*prior_matrix)(i), tuning, nrep,
+                    &DatedNodeOmegaModel::PrecisionMatrixLogProb, &DatedNodeOmegaModel::NoUpdate,
+                    this);
+            }
+        }
+    }
 
     //! MH moves on branch ages
     void MoveNodeAges(double tuning, int nrep) {
@@ -722,7 +760,8 @@ class DatedNodeOmegaModel : public ChainComponent {
 
 std::istream &operator>>(std::istream &is, std::unique_ptr<DatedNodeOmegaModel> &m) {
     std::string model_name, datafile, treefile, traitsfile, fossilsfile;
-
+    int prior_cov_df;
+    bool uniq_kappa;
 
     is >> model_name;
     if (model_name != "DatedNodeOmega") {
@@ -730,8 +769,9 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedNodeOmegaModel> 
         exit(1);
     }
 
-    is >> datafile >> treefile >> traitsfile >> fossilsfile;
-    m = std::make_unique<DatedNodeOmegaModel>(datafile, treefile, traitsfile, fossilsfile);
+    is >> datafile >> treefile >> traitsfile >> fossilsfile >> prior_cov_df >> uniq_kappa;
+    m = std::make_unique<DatedNodeOmegaModel>(
+        datafile, treefile, traitsfile, fossilsfile, prior_cov_df, uniq_kappa);
     Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
@@ -747,6 +787,8 @@ std::ostream &operator<<(std::ostream &os, DatedNodeOmegaModel &m) {
     os << m.traitsfile << '\t';
     assert(!m.fossilsfile.empty());
     os << m.fossilsfile << '\t';
+    os << m.prior_cov_df << '\t';
+    os << m.uniq_kappa << '\t';
     tracer.write_line(os);
     return os;
 }

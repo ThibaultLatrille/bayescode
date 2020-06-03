@@ -8,8 +8,9 @@
 class TaxonTraits {
   public:
     //! constructor, based on a vector of taxon names
-    explicit TaxonTraits(
-        std::string const &filename, TaxonSet const &taxon_set, bool polymorphism_aware) {
+    explicit TaxonTraits(std::string const &filename, TaxonSet const &taxon_set,
+        bool polymorphism_aware, int constrained_dim = 2)
+        : constrained_dimensions{constrained_dim} {
         taxon_presence.resize(taxon_set.GetNtaxa(), false);
         int gentime_dim{-1};
 
@@ -89,7 +90,8 @@ class TaxonTraits {
                          "match the names in the alignment."
                       << std::endl;
         } else {
-            std::cerr  << nbr_presence << " taxa found in trait file matched name the alignment." << std::endl;
+            std::cerr << nbr_presence << " taxa found in trait file matched name the alignment."
+                      << std::endl;
         }
         assert(polymorphism_aware == gentime);
     }
@@ -102,15 +104,19 @@ class TaxonTraits {
 
     int GetDim() const { return dimensions; }
 
-    int TraitDimToMultivariateDim(int trait_dim) const { return 2 + gentime + trait_dim; }
+    int TraitDimToMultivariateDim(int trait_dim) const {
+        return constrained_dimensions + gentime + trait_dim;
+    }
 
-    int MultivariateDimToTraitDim(int multi_dim) const { return multi_dim - 2 - gentime; }
+    int MultivariateDimToTraitDim(int multi_dim) const {
+        return multi_dim - constrained_dimensions - gentime;
+    }
 
     string GetHeader(int multi_dim) { return header.at(MultivariateDimToTraitDim(multi_dim)); }
 
     bool DataPresence(int taxon, int dim) const {
         if (taxon_presence[taxon]) {
-            return taxon_traits_presence[taxon][dim];
+            return taxon_traits_presence[taxon].at(dim);
         } else {
             return false;
         }
@@ -118,7 +124,7 @@ class TaxonTraits {
 
     double Data(int taxon, int dim) const {
         assert(taxon_traits_presence[taxon][dim]);
-        return taxon_traits[taxon][dim];
+        return taxon_traits[taxon].at(dim);
     }
 
     bool GenTimePresence() const { return gentime; }
@@ -135,6 +141,7 @@ class TaxonTraits {
 
   private:
     int dimensions{0};
+    int constrained_dimensions;
     std::vector<std::string> header;
     std::vector<bool> taxon_presence;
     std::vector<std::vector<bool>> taxon_traits_presence;

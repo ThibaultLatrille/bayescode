@@ -160,11 +160,12 @@ class DatedNodeMutSelModel : public ChainComponent {
     // Chronogram (diff between node ages)
     Chronogram *chronogram;
 
+    // Precision matrix and prior
     int dimensions;
-    int invert_whishart_df;
-    double invert_whishart_kappa;
-    // Covariance matrix
-    EMatrix precision_matrix;
+    int prior_cov_df;
+    bool uniq_kappa;
+    PriorCovariance *prior_matrix;
+    PrecisionMatrix *precision_matrix;
     NodeMultivariateProcess *node_multivariate;
 
     // Branch Population size (brownian process)
@@ -292,7 +293,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         std::string inprofiles, int inNcat, int inbaseNcat, bool incondition_aware,
         bool inpolymorphism_aware, unsigned inprecision, bool inarithmetic,
         bool inmove_root_pop_size, bool inclamp_pop_sizes, bool inclamp_nuc_matrix,
-        bool inclamp_corr_matrix, std::string infossilsfile)
+        bool inclamp_corr_matrix, std::string infossilsfile, int inprior_cov_df, bool inuniq_kappa)
         : datafile(std::move(indatafile)),
           treefile(std::move(intreefile)),
           traitsfile(std::move(intraitsfile)),
@@ -306,6 +307,8 @@ class DatedNodeMutSelModel : public ChainComponent {
           clamp_pop_sizes(inclamp_pop_sizes),
           clamp_nuc_matrix(inclamp_nuc_matrix),
           clamp_corr_matrix(inclamp_corr_matrix),
+          prior_cov_df{inprior_cov_df},
+          uniq_kappa{inuniq_kappa},
           baseNcat(inbaseNcat),
           Ncat(inNcat) {
         if (arithmetic) { std::cout << "Arithmetic mean instead of geodesic." << std::endl; }
@@ -358,11 +361,10 @@ class DatedNodeMutSelModel : public ChainComponent {
             assert(taxon_traits != nullptr);
         }
         if (taxon_traits != nullptr) { dimensions += taxon_traits->GetDim(); }
-        invert_whishart_df = dimensions + 1;
-        invert_whishart_kappa = 1.0;
-        precision_matrix = EMatrix::Identity(dimensions, dimensions) * 1.0;
+        prior_matrix = new PriorCovariance(dimensions, prior_cov_df, uniq_kappa);
+        precision_matrix = new PrecisionMatrix(*prior_matrix);
 
-        node_multivariate = new NodeMultivariateProcess(*chronogram, precision_matrix, dimensions);
+        node_multivariate = new NodeMultivariateProcess(*chronogram, *precision_matrix, dimensions);
 
         // Branch Population size (brownian process)
         nodepopsize = new NodeProcess(*node_multivariate, dim_pop_size);
@@ -511,9 +513,8 @@ class DatedNodeMutSelModel : public ChainComponent {
         model_node(info, "nodeages", *nodeages);
         model_node(info, "root_popsize", root_popsize);
         model_node(info, "node_multivariate", *node_multivariate);
-        model_node(info, "precision_matrix", precision_matrix);
-        model_node(info, "invert_whishart_kappa", invert_whishart_kappa);
-        model_node(info, "invert_whishart_df", invert_whishart_df);
+        model_node(info, "prior_cov_matrix", *prior_matrix);
+        model_node(info, "precision_matrix", *precision_matrix);
         model_node(info, "nucrelrate", nucrelrate);
         model_node(info, "nucstat", nucstat);
         model_node(info, "basekappa", basekappa);
@@ -551,9 +552,10 @@ class DatedNodeMutSelModel : public ChainComponent {
         model_stat(info, "rrent", [&]() { return Random::GetEntropy(nucrelrate); });
         // Descriptive statistics - Generator of the multivariate processes
         for (int i = 0; i < dimensions; i++) {
+            model_stat(info, "PriorCovariance_" + std::to_string(i), prior_matrix->coeffRef(i));
             for (int j = 0; j <= i; j++) {
                 model_stat(info, "Precision_" + std::to_string(i) + "_" + std::to_string(j),
-                    precision_matrix.coeffRef(i, j));
+                    precision_matrix->coeffRef(i, j));
             }
         }
         // Descriptive statistics - mean and var of mutation rate per generation
@@ -694,15 +696,15 @@ class DatedNodeMutSelModel : public ChainComponent {
 
     std::string GetDimensionName(int dim) const {
         if (dim == dim_pop_size) {
-            return "LogPopulationSize";
+            return "PopulationSize";
         } else if (dim == dim_mut_rate) {
             if (PolymorphismAware()) {
-                return "LogMutationRatePerGeneration";
+                return "MutationRatePerGeneration";
             } else {
-                return "LogMutationRatePerTime";
+                return "MutationRatePerTime";
             }
         } else if (dim == dim_gen_time and PolymorphismAware()) {
-            return "LogGenerationTime";
+            return "GenerationTime";
         } else {
             assert(taxon_traits != nullptr);
             return "Traits" + taxon_traits->GetHeader(dim);
@@ -837,7 +839,7 @@ class DatedNodeMutSelModel : public ChainComponent {
 
     //! \brief return total log prior (up to some constant)
     double GetLogPrior() const {
-        double total = 0;
+        double total = PrecisionMatrixLogProb();
         total += NodeMultivariateLogPrior();
         total += RootMultivariateLogPrior();
 
@@ -863,6 +865,11 @@ class DatedNodeMutSelModel : public ChainComponent {
 
     //! return joint log prob (log prior + log likelihood)
     double GetLogProb() const { return GetLogPrior() + GetLogLikelihood(); }
+
+    //! log prob of precision matrix
+    double PrecisionMatrixLogProb() const {
+        return prior_matrix->GetLogProb() + precision_matrix->GetLogProb(*prior_matrix);
+    }
 
     // Multivariate prior
     //! log prior over branch rates (brownian process)
@@ -1308,6 +1315,8 @@ class DatedNodeMutSelModel : public ChainComponent {
                 ChronoStart("PrecisionMatrix");
                 CollectScatterSuffStat();
                 SamplePrecisionMatrix();
+                MovePriorMatrix(0.1, 3);
+                MovePriorMatrix(0.01, 3);
                 ChronoStop("PrecisionMatrix");
             }
 
@@ -1329,9 +1338,17 @@ class DatedNodeMutSelModel : public ChainComponent {
     }
 
     void SamplePrecisionMatrix() {
-        scattersuffstat->SamplePrecisionMatrix(
-            precision_matrix, invert_whishart_df, invert_whishart_kappa);
+        scattersuffstat->SamplePrecisionMatrix(*precision_matrix, *prior_matrix);
     };
+
+    //! MH moves on the invert wishart matrix (prior of the covariance matrix)
+    void MovePriorMatrix(double tuning, int nrep) {
+        for (int i = 0; i < (uniq_kappa ? 1 : dimensions); ++i) {
+            Move::Scaling((*prior_matrix)(i), tuning, nrep,
+                &DatedNodeMutSelModel::PrecisionMatrixLogProb, &DatedNodeMutSelModel::NoUpdate,
+                this);
+        }
+    }
 
     //! MH moves on branch ages
     void MoveNodeAges(double tuning, int nrep, bool leaves_to_root) {
@@ -1930,9 +1947,9 @@ class DatedNodeMutSelModel : public ChainComponent {
 
 std::istream &operator>>(std::istream &is, std::unique_ptr<DatedNodeMutSelModel> &m) {
     std::string model_name, datafile, treefile, traitsfile, profilesfile, fossilsfile;
-    int Ncat, baseNcat;
+    int Ncat, baseNcat, prior_cov_df;
     bool condition_aware, polymorphism_aware, arithmetic, move_root_pop_size, clamp_pop_sizes,
-        clamp_nuc_matrix, clamp_corr_matrix;
+        clamp_nuc_matrix, clamp_corr_matrix, uniq_kappa;
     unsigned precision;
 
     is >> model_name;
@@ -1944,10 +1961,11 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<DatedNodeMutSelModel>
     is >> datafile >> treefile >> traitsfile >> profilesfile >> fossilsfile;
     is >> Ncat >> baseNcat;
     is >> condition_aware >> polymorphism_aware >> precision >> arithmetic >> move_root_pop_size >>
-        clamp_pop_sizes >> clamp_nuc_matrix >> clamp_corr_matrix;
+        clamp_pop_sizes >> clamp_nuc_matrix >> clamp_corr_matrix >> prior_cov_df >> uniq_kappa;
     m = std::make_unique<DatedNodeMutSelModel>(datafile, treefile, traitsfile, profilesfile, Ncat,
         baseNcat, condition_aware, polymorphism_aware, precision, arithmetic, move_root_pop_size,
-        clamp_pop_sizes, clamp_nuc_matrix, clamp_corr_matrix, fossilsfile);
+        clamp_pop_sizes, clamp_nuc_matrix, clamp_corr_matrix, fossilsfile, prior_cov_df,
+        uniq_kappa);
     Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
@@ -1975,6 +1993,8 @@ std::ostream &operator<<(std::ostream &os, DatedNodeMutSelModel &m) {
     os << m.clamp_pop_sizes << '\t';
     os << m.clamp_nuc_matrix << '\t';
     os << m.clamp_corr_matrix << '\t';
+    os << m.prior_cov_df << '\t';
+    os << m.uniq_kappa << '\t';
     tracer.write_line(os);
     return os;
 }

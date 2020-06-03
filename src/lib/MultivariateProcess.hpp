@@ -12,6 +12,69 @@ static int dim_omega = 0;
 static int dim_mut_rate = 1;
 static int dim_gen_time = 2;
 
+class PriorCovariance : public EVector {
+  private:
+    int dimensions;
+    int df;
+    bool uniq_kappa;
+
+  public:
+    PriorCovariance(int dimensions, int df, bool uniq_kappa)
+        : EVector(EVector::Ones(uniq_kappa ? 1 : dimensions)),
+          dimensions{dimensions},
+          df{df},
+          uniq_kappa{uniq_kappa} {};
+
+    double GetLogProb(int dim) const {
+        if (0.00001 > (*this)(dim) or (*this)(dim) > 100000) {
+            return -std::numeric_limits<double>::infinity();
+        } else {
+            return -std::log((*this)(dim));
+        }
+    }
+
+    double GetLogProb() const {
+        if (uniq_kappa) {
+            return GetLogProb(0);
+        } else {
+            double logprob = 0.0;
+            for (int i = 0; i < dimensions; ++i) { logprob += GetLogProb(i); }
+            return logprob;
+        }
+    }
+
+    int GetDimensions() const { return dimensions; }
+    EMatrix GetPriorCovarianceMatrix() const {
+        if (uniq_kappa) {
+            return EVector::Constant(dimensions, (*this)(0)).asDiagonal();
+        } else {
+            return this->asDiagonal();
+        }
+    }
+
+    EMatrix GetPriorPrecisionMatrix() const {
+        if (uniq_kappa) {
+            return EVector::Constant(dimensions, 1.0 / (*this)(0)).asDiagonal();
+        } else {
+            return this->cwiseInverse().asDiagonal();
+        }
+    }
+
+    int GetDoF() const { return dimensions + df; }
+};
+
+class PrecisionMatrix : public EMatrix {
+  public:
+    explicit PrecisionMatrix(PriorCovariance const &prior)
+        : EMatrix(prior.GetPriorPrecisionMatrix()){};
+
+    double GetLogProb(PriorCovariance const &prior) const {
+        EMatrix cov = prior.GetPriorCovarianceMatrix();
+        return 0.5 * (std::log(this->determinant()) * (prior.GetDoF() - prior.GetDimensions() - 1) -
+                         (cov * (*this)).trace() + prior.GetDoF() * std::log(cov.determinant()));
+    }
+};
+
 /**
  * \brief A brownian univariate NodeProcess
  *
@@ -25,7 +88,7 @@ static int dim_gen_time = 2;
 class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
   public:
     NodeMultivariateProcess(
-        const Chronogram &inchrono, const EMatrix &inprecision_matrix, int indimensions);
+        const Chronogram &inchrono, const PrecisionMatrix &inprecision_matrix, int indimensions);
 
     //! variance of the pro recursively a node from prior
     double GetSigma(int dimension) const;
@@ -78,7 +141,7 @@ class NodeMultivariateProcess : public SimpleNodeArray<EVector> {
   protected:
     const Chronogram &chronogram;
     int dimensions;
-    const EMatrix &precision_matrix;
+    const PrecisionMatrix &precision_matrix;
 };
 
 class NodeProcess {

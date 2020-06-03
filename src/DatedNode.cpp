@@ -1,6 +1,6 @@
 #include <cmath>
 #include <fstream>
-#include "DatedNodeOmegaModel.hpp"
+#include "DatedNodeModel.hpp"
 #include "components/ChainCheckpoint.hpp"
 #include "components/ChainDriver.hpp"
 #include "components/ConsoleLogger.hpp"
@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
     ChainCmdLine cmd{argc, argv, "DatedNodeOmega", ' ', "0.1"};
 
     ChainDriver *chain_driver = nullptr;
-    unique_ptr<DatedNodeOmegaModel> model = nullptr;
+    unique_ptr<DatedNodeModel> model = nullptr;
 
     if (cmd.resume_from_checkpoint()) {
         std::ifstream is = cmd.checkpoint_file();
@@ -36,18 +36,16 @@ int main(int argc, char *argv[]) {
         is >> model;
         check_restart(*model, cmd.chain_name() + ".trace");
     } else {
-        InferenceAppArgParse inference_args(cmd);
+        TreeAppArgParse inference_args(cmd);
         DatedNodeOmegaArgParse args(cmd);
         cmd.parse();
         chain_driver = new ChainDriver(
             cmd.chain_name(), inference_args.every.getValue(), inference_args.until.getValue());
-        model = std::make_unique<DatedNodeOmegaModel>(inference_args.alignment.getValue(),
-            inference_args.treefile.getValue(), args.traitsfile.getValue(), args.fossils.getValue(),
-            args.prior_cov_df.getValue(), args.uniq_kappa.getValue());
+        model = std::make_unique<DatedNodeModel>(inference_args.treefile.getValue(),
+            args.traitsfile.getValue(), args.fossils.getValue(), args.prior_cov_df.getValue(),
+            args.uniq_kappa.getValue());
         model->Update();
     }
-    model->ResampleSub(1.0);
-    model->MoveParameters(10);
     ConsoleLogger console_logger;
     ChainCheckpoint chain_checkpoint(cmd.chain_name() + ".param", *chain_driver, *model);
     StandardTracer trace(*model, cmd.chain_name());

@@ -8,7 +8,7 @@ using namespace std;
 
 PhyloProcess::PhyloProcess(const Tree *intree, const SequenceAlignment *indata,
     const BranchSelector<double> *inbranchlength, const Selector<double> *insiterate,
-    PolyProcess *inpolyprocess) : taxon_map(intree, indata) {
+    PolyProcess *inpolyprocess) : taxon_map(intree, indata->GetTaxonSet()) {
     tree = intree;
     data = indata;
     Nstate = data->GetNstate();

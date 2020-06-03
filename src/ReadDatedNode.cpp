@@ -1,6 +1,6 @@
 #include <cmath>
 #include <fstream>
-#include "DatedNodeMutSelModel.hpp"
+#include "DatedNodeModel.hpp"
 #include "components/ChainDriver.hpp"
 #include "components/ChainReader.hpp"
 #include "components/ReadArgParse.hpp"
@@ -17,28 +17,13 @@ std::string double2str(double val) {
     return so.str();
 }
 
-class ReadNodeMutSelArgParse : public ReadArgParse {
+class ReadNodeOmegaArgParse : public ReadArgParse {
   public:
-    explicit ReadNodeMutSelArgParse(CmdLine &cmd) : ReadArgParse(cmd) {}
-
-    TCLAP::ValueArg<string> profiles{"o", "profiles",
-        "Output profiles name if desired (otherwise given by {chain_name}.siteprofiles)", false, "",
-        "string", cmd};
-
-    SwitchArg ss{
-        "s", "ss", "Computes the mean posterior site-specific state equilibrium frequencies", cmd};
+    explicit ReadNodeOmegaArgParse(CmdLine &cmd) : ReadArgParse(cmd) {}
 
     SwitchArg newick{"t", "newick",
         "Computes the mean posterior node-specific entries of the multivariate Brownian process",
         cmd};
-
-    string GetProfilesName() {
-        if (profiles.getValue().empty()) {
-            return GetChainName() + ".siteprofiles";
-        } else {
-            return profiles.getValue();
-        }
-    }
 };
 
 void export_tree(ExportTree export_tree, string name, string const &path,
@@ -69,7 +54,7 @@ void export_tree(ExportTree export_tree, string name, string const &path,
 
 int main(int argc, char *argv[]) {
     CmdLine cmd{"DatedMutSel", ' ', "0.1"};
-    ReadNodeMutSelArgParse read_args(cmd);
+    ReadNodeOmegaArgParse read_args(cmd);
     cmd.parse(argc, argv);
 
     string chain_name = read_args.GetChainName();
@@ -79,7 +64,7 @@ int main(int argc, char *argv[]) {
 
     ifstream is{chain_name + ".param"};
     ChainDriver *fake_read = nullptr;
-    unique_ptr<DatedNodeMutSelModel> model = nullptr;
+    unique_ptr<DatedNodeModel> model = nullptr;
     fake_read = new ChainDriver(is);
     is >> model;
     ChainReader cr(*model, chain_name + ".chain");
@@ -87,47 +72,11 @@ int main(int argc, char *argv[]) {
     cr.skip(burnin);
     cerr << size << " points to read\n";
 
-    if (read_args.GetPpred()) {
-        for (int i = 0; i < size; i++) {
-            cerr << '.';
-            cr.skip(every);
-            model->PostPred("ppred_" + chain_name + "_" + to_string(i) + ".ali");
-        }
-        cerr << '\n';
-    } else if (read_args.trace.getValue()) {
-        recompute_trace<DatedNodeMutSelModel>(*model, cr, chain_name, every, size);
-    } else if (read_args.ss.getValue()) {
-        vector<vector<double>> sitestat(model->GetNsite(), {0});
-
-        for (int step = 0; step < size; step++) {
-            cerr << '.';
-            cr.skip(every);
-            for (int i = 0; i < model->GetNsite(); i++) {
-                vector<double> const &profile = model->GetProfile(i);
-                if (sitestat[i].size() != profile.size()) { sitestat[i].resize(profile.size(), 0); }
-                for (unsigned k{0}; k < profile.size(); k++) { sitestat[i][k] += profile[k]; }
-            }
-        }
-        cerr << '\n';
-
-        ofstream os(read_args.GetProfilesName().c_str());
-        os << model->GetNsite() << '\n';
-        for (int i = 0; i < model->GetNsite(); i++) {
-            os << i + 1;
-            for (auto &aa : sitestat[i]) {
-                aa /= size;
-                os << '\t' << aa;
-            }
-            os << '\n';
-        }
-        cerr << "mean site-specific profiles in " << read_args.GetProfilesName() << "\n";
-        cerr << '\n';
+    if (read_args.trace.getValue()) {
+        recompute_trace<DatedNodeModel>(*model, cr, chain_name, every, size);
     } else if (read_args.newick.getValue()) {
         vector<vector<vector<double>>> dim_node_traces(model->GetDimension());
         vector<vector<double>> branch_times(model->GetTree().nb_nodes());
-        vector<vector<double>> log10_branch_length(model->GetTree().nb_nodes());
-        vector<vector<double>> log10_leaves_theta(model->GetTree().nb_nodes());
-        vector<vector<double>> contrast_pop_size(model->GetTree().nb_nodes());
 
         for (int dim{0}; dim < model->GetDimension(); dim++) {
             dim_node_traces[dim].resize(model->GetTree().nb_nodes());
@@ -137,7 +86,7 @@ int main(int argc, char *argv[]) {
             cerr << '.';
             cr.skip(every);
 
-            model->UpdateBranches();
+            model->Update();
             for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(model->GetTree().nb_nodes());
                  node++) {
                 if (!model->GetTree().is_root(node)) {
@@ -145,11 +94,6 @@ int main(int argc, char *argv[]) {
                     assert(branch_time >= 0);
                     assert(branch_time <= 1);
                     branch_times[node].push_back(branch_time);
-                    log10_branch_length[node].push_back(log10(model->GetBranchLength(node)));
-                    contrast_pop_size[node].push_back(model->GetContrast(node, dim_pop_size));
-                }
-                if (model->PolymorphismAware() and model->GetTree().is_leaf(node)) {
-                    log10_leaves_theta[node].push_back(log10(model->GetTheta(node)));
                 }
                 for (int dim{0}; dim < model->GetDimension(); dim++) {
                     dim_node_traces[dim][node].push_back(model->GetBrownianEntry(node, dim));
@@ -166,15 +110,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        export_tree(base_export_tree, "ContrastPopulationSize", read_args.GetChainName(),
-            contrast_pop_size);
-        export_tree(
-            base_export_tree, "Log10BranchLength", read_args.GetChainName(), log10_branch_length);
-        export_tree(base_export_tree, "BranchTime", read_args.GetChainName(), branch_times);
-        if (model->PolymorphismAware()) {
-            export_tree(
-                base_export_tree, "Log10Theta", read_args.GetChainName(), log10_leaves_theta);
-        }
+        export_tree(base_export_tree, "BranchTime", read_args.GetChainName(), branch_times, false);
         for (int dim{0}; dim < model->GetDimension(); dim++) {
             export_tree(base_export_tree, model->GetDimensionName(dim), read_args.GetChainName(),
                 dim_node_traces[dim], true);
@@ -182,6 +118,6 @@ int main(int argc, char *argv[]) {
                 dim_node_traces[dim], false);
         }
     } else {
-        stats_posterior<DatedNodeMutSelModel>(*model, cr, every, size);
+        stats_posterior<DatedNodeModel>(*model, cr, every, size);
     }
 }

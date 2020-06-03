@@ -14,7 +14,8 @@ class ScatterSuffStat : public SuffStat {
 
     void AddSuffStat(NodeMultivariateProcess const &nodeprocessses);
 
-    void SamplePrecisionMatrix(EMatrix &sampling_matrix, int df, double kappa) const;
+    void SamplePrecisionMatrix(
+        PrecisionMatrix &precision_matrix, PriorCovariance const &prior_matrix) const;
 
   protected:
     const Tree &tree;

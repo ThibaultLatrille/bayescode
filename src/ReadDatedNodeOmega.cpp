@@ -26,18 +26,23 @@ class ReadNodeOmegaArgParse : public ReadArgParse {
         cmd};
 };
 
-void export_tree(ExportTree export_tree, string const &name, string const &path,
-    vector<vector<double>> &values) {
+void export_tree(ExportTree export_tree, string name, string const &path,
+    vector<vector<double>> &values, bool log_value = true) {
+    if (log_value) { name = "Log" + name; }
     for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(export_tree.GetTree().nb_nodes());
          node++) {
-        if (!values[node].empty()) {
-            sort(values[node].begin(), values[node].end());
-            auto up = static_cast<size_t>(0.95 * values[node].size());
-            if (up >= values.size()) { up = values[node].size() - 1; }
-            auto down = static_cast<size_t>(0.05 * values[node].size());
-            export_tree.set_tag(node, name + "_min", double2str(values[node].at(down)));
-            export_tree.set_tag(node, name + "_max", double2str(values[node].at(up)));
-            export_tree.set_tag(node, name, double2str(mean(values[node])));
+        auto value_array = values[node];
+        if (!log_value) {
+            for (auto &v : value_array) { v = exp(v); }
+        }
+        if (!value_array.empty()) {
+            sort(value_array.begin(), value_array.end());
+            auto up = static_cast<size_t>(0.95 * value_array.size());
+            if (up >= values.size()) { up = value_array.size() - 1; }
+            auto down = static_cast<size_t>(0.05 * value_array.size());
+            export_tree.set_tag(node, name + "_min", double2str(value_array.at(down)));
+            export_tree.set_tag(node, name + "_max", double2str(value_array.at(up)));
+            export_tree.set_tag(node, name, double2str(mean(value_array)));
         }
     }
     string nhxname = path + "." + name + ".nhx";
@@ -120,7 +125,9 @@ int main(int argc, char *argv[]) {
         export_tree(base_export_tree, "BranchTime", read_args.GetChainName(), branch_times);
         for (int dim{0}; dim < model->GetDimension(); dim++) {
             export_tree(base_export_tree, model->GetDimensionName(dim), read_args.GetChainName(),
-                dim_node_traces[dim]);
+                dim_node_traces[dim], true);
+            export_tree(base_export_tree, model->GetDimensionName(dim), read_args.GetChainName(),
+                dim_node_traces[dim], false);
         }
     } else {
         stats_posterior<DatedNodeOmegaModel>(*model, cr, every, size);

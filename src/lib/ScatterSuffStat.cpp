@@ -18,21 +18,20 @@ void ScatterSuffStat::AddSuffStat(NodeMultivariateProcess const &nodeprocessses)
     }
 }
 
-void ScatterSuffStat::SamplePrecisionMatrix(EMatrix &sampling_matrix, int df, double kappa) const {
-    sampling_matrix.setZero();
+void ScatterSuffStat::SamplePrecisionMatrix(
+    PrecisionMatrix &precision_matrix, PriorCovariance const &prior_cov_matrix) const {
+    precision_matrix.setZero();
 
-    EMatrix prior_matrix = EMatrix::Identity(dimensions, dimensions) * kappa;
-    EMatrix precision_matrix = (prior_matrix + scattermatrix).inverse();
-
-    Eigen::SelfAdjointEigenSolver<EMatrix> eigen_solver(precision_matrix);
-    EMatrix transform =
-        eigen_solver.eigenvectors() * eigen_solver.eigenvalues().cwiseSqrt().asDiagonal();
+    EMatrix cov = (prior_cov_matrix.GetPriorCovarianceMatrix() + scattermatrix).inverse();
+    Eigen::SelfAdjointEigenSolver<EMatrix> e_solver(cov);
+    EMatrix A = e_solver.eigenvectors() * e_solver.eigenvalues().cwiseSqrt().asDiagonal();
+    assert((A * A.transpose() - cov).norm() < 1e-8);
     EVector sampled_vector = EVector::Zero(dimensions);
 
-    int nbr_samples = df + tree.nb_branches();
+    int nbr_samples = prior_cov_matrix.GetDoF() + tree.nb_branches();
     for (int i = 0; i < nbr_samples; i++) {
         for (int dim = 0; dim < dimensions; dim++) { sampled_vector(dim) = Random::sNormal(); }
-        sampled_vector = transform * sampled_vector;
-        sampling_matrix += sampled_vector * sampled_vector.transpose();
+        sampled_vector = A * sampled_vector;
+        precision_matrix += sampled_vector * sampled_vector.transpose();
     }
 }

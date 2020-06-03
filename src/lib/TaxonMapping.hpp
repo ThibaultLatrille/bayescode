@@ -7,9 +7,9 @@
 class TaxonMap {
   public:
     //! constructor, based on a vector of taxon names
-    TaxonMap(const Tree *tree, const SequenceAlignment *data) {
-        taxon_table = data->GetTaxonSet()->get_index_table(tree);
-        reverse_taxon_table = data->GetTaxonSet()->get_reverse_index_table(tree);
+    TaxonMap(const Tree *tree, const TaxonSet *taxon_set) {
+        taxon_table = taxon_set->get_index_table(tree);
+        reverse_taxon_table = taxon_set->get_reverse_index_table(tree);
     };
 
     //! default constructor

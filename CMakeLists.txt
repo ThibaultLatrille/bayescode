@@ -70,6 +70,14 @@ target_link_libraries(globom ${BASE_LIBS})
 add_executable(nodeomegamutsel "src/DatedNodeOmega.cpp")
 target_link_libraries(nodeomegamutsel bayescode_lib tree_lib)
 
+# Read Node Brownian (readnodetraitsmutsel)
+add_executable(readnodetraitsmutsel "src/ReadDatedNode.cpp")
+target_link_libraries(readnodetraitsmutsel bayescode_lib tree_lib)
+
+# Node Brownian (nodetraitsmutsel)
+add_executable(nodetraitsmutsel "src/DatedNode.cpp")
+target_link_libraries(nodetraitsmutsel bayescode_lib tree_lib)
+
 # Read Node omega (readnodeomega)
 add_executable(readnodeomegamutsel "src/ReadDatedNodeOmega.cpp")
 target_link_libraries(readnodeomegamutsel bayescode_lib tree_lib)

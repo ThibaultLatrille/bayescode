@@ -4,7 +4,7 @@
 #include "MultivariateProcess.hpp"
 
 NodeMultivariateProcess::NodeMultivariateProcess(
-    const Chronogram &inchrono, const EMatrix &inprecision_matrix, int indimensions)
+    const Chronogram &inchrono, const PrecisionMatrix &inprecision_matrix, int indimensions)
     : SimpleNodeArray<EVector>(inchrono.GetTree()),
       chronogram(inchrono),
       dimensions(indimensions),

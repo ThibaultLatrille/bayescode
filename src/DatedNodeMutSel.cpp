@@ -39,7 +39,10 @@ class DatedNodeMutselArgParse : public BaseArgParse {
         "d", "arithmetic", "Use arithmetic mean instead of arithmetic", cmd, false};
     ValueArg<std::string> fossils{
         "", "fossils", "Fossils data (to clamp the node ages)", false, "Null", "string", cmd};
-
+    ValueArg<int> prior_cov_df{"", "df", "Invert Wishart degree of freedom", false, 0, "int", cmd};
+    SwitchArg uniq_kappa{"", "uniq_kappa",
+        "Unique kappa for the invert Wishart matrix prior (otherwise 1 for each dimension)", cmd,
+        false};
     void check() {
         if (condition_aware.getValue()) {
             cerr << "The switch parameter ([-b] or [--condition_aware]) is not yet implemented."
@@ -78,7 +81,7 @@ int main(int argc, char *argv[]) {
             args.precision.getValue(), args.arithmetic.getValue(),
             args.move_root_pop_size.getValue(), args.clamp_pop_sizes.getValue(),
             args.clamp_nuc_matrix.getValue(), args.clamp_corr_matrix.getValue(),
-            args.fossils.getValue());
+            args.fossils.getValue(), args.prior_cov_df.getValue(), args.uniq_kappa.getValue());
         model->Update();
     }
     model->ResampleSub(1.0);
