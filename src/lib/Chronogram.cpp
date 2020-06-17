@@ -51,7 +51,7 @@ NodeAges::NodeAges(const Tree &intree, const string &fossilsfile)
             clamped_ages[node_clamped] = stod(word);
             (*this)[node_clamped] = clamped_ages[node_clamped];
             getline(line_stream, word, sep);
-            clamped_lower_bound[node_clamped] = stod(word);
+            clamped_lower_bound[node_clamped] = max(stod(word), 0.0);
             assert(clamped_lower_bound[node_clamped] <= clamped_ages[node_clamped]);
             getline(line_stream, word, sep);
             clamped_upper_bound[node_clamped] = stod(word);
@@ -187,12 +187,7 @@ void NodeAges::SlidingMove(Tree::NodeIndex node, double scale) {
     if (upper_bound == lower_bound) { return; }
 
     double x = GetVal(node);
-    if (std::isinf(upper_bound)) {
-        assert(lower_bound != 0.0);
-        x += scale * lower_bound;
-    } else {
-        x += scale * (upper_bound - lower_bound);
-    }
+    x += scale / GetVal(GetTree().root());
 
     while ((x < lower_bound) || (x > upper_bound)) {
         if (x < lower_bound) { x = 2 * lower_bound - x; }

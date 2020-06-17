@@ -1269,10 +1269,10 @@ class DatedNodeMutSelModel : public ChainComponent {
             CollectLengthSuffStat();
 
             ChronoStart("NodeAges");
-            MoveNodeAges(0.2, 3, true);
-            MoveNodeAges(0.2, 3, false);
-            MoveNodeAges(0.05, 3, true);
-            MoveNodeAges(0.05, 3, false);
+            MoveNodeAges(0.1, 3, true);
+            MoveNodeAges(0.1, 3, false);
+            MoveNodeAges(0.02, 3, true);
+            MoveNodeAges(0.02, 3, false);
             ChronoStop("NodeAges");
 
             ChronoStart("NodeRates");

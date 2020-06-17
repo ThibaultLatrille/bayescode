@@ -479,10 +479,11 @@ class DatedNodeOmegaModel : public ChainComponent {
     // Node ages and branch rates
     //! \brief log prob to be recomputed when moving age of focal node
     double LocalNodeAgeLogProb(Tree::NodeIndex node) const {
-        double tot = 0;
-        tot += LocalNodeMultivariateLogPrior(node);
-        tot += LocalBranchLengthSuffStatLogProb(node);
-        return tot;
+        if (GetTree().is_root(node)) {
+            return NodeMultivariateLogPrior() + BranchLengthSuffStatLogProb();
+        } else {
+            return LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
+        }
     }
 
     //! \brief log prob to be recomputed when moving branch rates (brownian process) around of focal
@@ -511,6 +512,12 @@ class DatedNodeOmegaModel : public ChainComponent {
     //! the length of a given branch
     double BranchLengthSuffStatLogProb(Tree::BranchIndex branch) const {
         return lengthpathsuffstatarray->GetVal(branch).GetLogProb(branchlength->GetVal(branch));
+    }
+
+    //! \brief return log prob of current substitution mapping (on all branches), as a function of
+    //! the length all branches
+    double BranchLengthSuffStatLogProb() const {
+        return lengthpathsuffstatarray->GetLogProb(*branchlength);
     }
 
     // Omega
@@ -574,8 +581,8 @@ class DatedNodeOmegaModel : public ChainComponent {
     void MoveParameters(int nrep) {
         for (int rep = 0; rep < nrep; rep++) {
             CollectLengthSuffStat();
-            MoveNodeAges(1.0, 3);
             MoveNodeAges(0.1, 3);
+            MoveNodeAges(0.02, 3);
 
             MoveNodeRates(1.0, 3);
             MoveNodeRates(0.1, 3);
