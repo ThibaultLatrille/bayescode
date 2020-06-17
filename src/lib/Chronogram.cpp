@@ -67,7 +67,7 @@ NodeAges::NodeAges(const Tree &intree, const string &fossilsfile)
             }
             (*this)[GetTree().root()] = max_root_age;
         }
-
+        clamped = true;
     } else {
         (*this)[GetTree().root()] = 1.0;
         node_clamped_set.insert(GetTree().root());
@@ -187,7 +187,7 @@ void NodeAges::SlidingMove(Tree::NodeIndex node, double scale) {
     if (upper_bound == lower_bound) { return; }
 
     double x = GetVal(node);
-    x += scale / GetVal(GetTree().root());
+    x += scale * GetVal(GetTree().root());
 
     while ((x < lower_bound) || (x > upper_bound)) {
         if (x < lower_bound) { x = 2 * lower_bound - x; }

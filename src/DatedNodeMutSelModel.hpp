@@ -1355,7 +1355,9 @@ class DatedNodeMutSelModel : public ChainComponent {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node :
                 leaves_to_root ? tree->leaves_root_to_iter() : tree->root_to_leaves_iter()) {
-                if (!tree->is_leaf(node)) { MoveNodeAge(node, tuning); }
+                if (!tree->is_leaf(node) and !(nodeages->Unclamped() and tree->is_root(node))) {
+                    MoveNodeAge(node, tuning);
+                }
             }
         }
     }
