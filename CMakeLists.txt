@@ -90,6 +90,14 @@ target_link_libraries(nodemutsel bayescode_lib tree_lib)
 add_executable(readnodemutsel "src/ReadDatedNodeMutSel.cpp")
 target_link_libraries(readnodemutsel bayescode_lib tree_lib)
 
+# Brownian Ne and omega, site mutsel (branchOmegaNeSiteMutsel)
+add_executable(branchOmegaNeSiteMutsel "src/BranchOmegaNeSiteMutSel.cpp")
+target_link_libraries(branchOmegaNeSiteMutsel bayescode_lib tree_lib)
+
+# Read Brownian Ne and omega, site mutsel (branchOmegaNeSiteMutsel)
+add_executable(readbranchOmegaNeSiteMutsel "src/ReadBranchOmegaNeSiteMutSel.cpp")
+target_link_libraries(readbranchOmegaNeSiteMutsel bayescode_lib tree_lib)
+
 # Read single omega (readglobom)
 add_executable(readglobom "src/ReadSingleOmega.cpp")
 target_link_libraries(readglobom ${BASE_LIBS})

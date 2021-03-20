@@ -40,6 +40,7 @@ clean:
 	@rm -rf _mutseldm5
 	@rm -rf _mutselomega
 	@rm -rf _dated
+	@rm -rf _branchOmegaNe
 
 # ==============================================================================================================
 #  CODE QUALITY
@@ -106,6 +107,10 @@ run-app-tests: all
 	_build/nodemutsel _test/nodemutsel_gal4
 	@echo "\n\e[35m\e[1m== Node MutSel read =========================================================\e[0m"
 	_build/readnodemutsel --ss _test/nodemutsel_gal4
+	@echo "\n\e[35m\e[1m== branch Omega, Ne - Site MutSel run =======================================\e[0m"
+	_build/branchOmegaNeSiteMutsel --ncat 3 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _test/branchomegamutsel_gal4
+	@echo "\n\e[35m\e[1m== branch Omega, Ne - Site MutSel read ======================================\e[0m"
+	_build/readbranchOmegaNeSiteMutsel --ss _test/branchomegamutsel_gal4
 
 # @make --no-print-directory run-multigeneglobom-test
 .PHONY: run-multigeneglobom-test
@@ -163,6 +168,16 @@ DM5: _build
 	_build/mutseldm5 -a data/bglobin/bglobin.phy -t data/bglobin/bglobin.tre  --omegashift 1.0 --freeomega --omegancat 10 --ncat 30 -u 30 _mutseldm5/bglobin
 	_build/readmutseldm5 _mutseldm5/bglobin
 	_build/mutseldm5 _mutseldm5/bglobin
+
+.PHONY: branchOmegaNe
+branchOmegaNe: _build
+	@cd _build ; make --no-print-directory -j8 branchOmegaNeSiteMutsel readbranchOmegaNeSiteMutsel
+	@rm -rf _branchOmegaNe
+	@mkdir _branchOmegaNe
+	@echo "\n\e[35m\e[1m== branch Omega, Ne - Site MutSel run =======================================\e[0m"
+	_build/branchOmegaNeSiteMutsel --ncat 3 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u ${POINTS} _branchOmegaNe/branchomegamutsel_gal4
+	@echo "\n\e[35m\e[1m== branch Omega, Ne - Site MutSel read ======================================\e[0m"
+	_build/readbranchOmegaNeSiteMutsel --ss _branchOmegaNe/branchomegamutsel_gal4
 
 .PHONY: dated
 dated: _build
