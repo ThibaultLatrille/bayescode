@@ -20,7 +20,7 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
     //! fitness profiles and an array of population size.
     MutSelNeCodonMatrixBidimArray(const CodonStateSpace *incodonstatespace,
         const SubMatrix *innucmatrix, const Selector<std::vector<double>> *infitnessarray,
-        const std::vector<double> &pop_size_array);
+        const std::vector<double> &pop_size_array, const std::vector<double> &omega_array = {});
 
     ~MutSelNeCodonMatrixBidimArray() override;
 
@@ -37,6 +37,9 @@ class MutSelNeCodonMatrixBidimArray : public BidimArray<SubMatrix>,
 
     //! Set ne for row (branch) i
     void UpdateRowNe(int i, double Ne);
+
+    //! Set ne for row (branch) i
+    void UpdateRowOmega(int i, double omega);
 
     //! signal corruption when fitness and Ne have not changed
     void UpdateCodonMatricesNoFitnessRecomput();
@@ -69,7 +72,7 @@ class AAMutSelNeCodonSubMatrixArray : public Array<SubMatrix>,
     //! profiles and a single Ne value (for all matrices)
     AAMutSelNeCodonSubMatrixArray(const CodonStateSpace *incodonstatespace,
         const SubMatrix *innucmatrix, const Selector<std::vector<double>> *inaafitnessarray,
-        double inne);
+        double inne, double inomega);
 
     ~AAMutSelNeCodonSubMatrixArray() override { Delete(); }
 
@@ -86,6 +89,10 @@ class AAMutSelNeCodonSubMatrixArray : public Array<SubMatrix>,
     //! makes an error (with exit) if this is not the case.
     void UpdateNe(double ne) {
         for (int i = 0; i < GetSize(); i++) { (*this)[i].UpdateNe(ne); }
+    }
+
+    void UpdateOmega(double omega) {
+        for (int i = 0; i < GetSize(); i++) { (*this)[i].UpdateOmega(omega); }
     }
 
     //! update all matrices

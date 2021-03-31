@@ -275,7 +275,7 @@ class SingleOmegaModel : public ChainComponent {
     //! notified, such that the matrix knows that it will have to recalculate
     //! whichever component is requested later on upon demand.
     void TouchCodonMatrix() {
-        codonmatrix->SetOmega(omega);
+        codonmatrix->UpdateOmega(omega);
         codonmatrix->CorruptMatrix();
     }
 

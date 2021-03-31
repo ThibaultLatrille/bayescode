@@ -462,15 +462,16 @@ class DatedNodeMutSelModel : public ChainComponent {
         occupancy = new OccupancySuffStat(Ncat);
 
         // codon matrices per branch and per site
-        branchcomponentcodonmatrixarray = new MutSelNeCodonMatrixBidimArray(
-            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, branchpopsize->GetArray());
+        branchcomponentcodonmatrixarray =
+            new MutSelNeCodonMatrixBidimArray(GetCodonStateSpace(), nucmatrix,
+                componentaafitnessarray, branchpopsize->GetArray());
 
         // sub matrices per branch and per site
         branchsitecodonmatrixarray = new BranchComponentMatrixSelector<SubMatrix>(
             branchcomponentcodonmatrixarray, sitealloc, *tree);
 
         rootcomponentcodonmatrixarray = new AAMutSelNeCodonSubMatrixArray(
-            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, root_popsize);
+            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, root_popsize, 1.0);
 
         // sub matrices for root, across sites
         rootsitecodonmatrixarray =

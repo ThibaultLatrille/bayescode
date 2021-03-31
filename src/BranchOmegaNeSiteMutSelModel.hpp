@@ -148,7 +148,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     const TaxonSet *taxonset;
     CodonSequenceAlignment *codondata;
     TaxonTraits *taxon_traits{nullptr};
-    PolyData *polydata{nullptr};
 
     int Nsite;
     int Ntaxa;
@@ -173,13 +172,13 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     BranchProcess *branchpopsize;
     double root_popsize{1.0};
 
+    // Branch Omega (brownian process)
+    NodeProcess *nodeomega;
+    BranchProcess *branchomega;
+
     // Branch mutation rates (nbr of mutations per generation)
     NodeProcess *nodemutrates;
     BranchProcess *branchmutrates;
-
-    // Branch generation rate (nbr of generations per time)
-    NodeProcess *nodegentimes;
-    BranchProcess *branchgentimes;
 
     // Branch lengths (product of branch rates and chronogram)
     BranchwiseProduct *branchlength;
@@ -241,21 +240,13 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
 
     PhyloProcess *phyloprocess;
 
-    // global theta (4*Ne*u) used for polymorphism
-    double theta_scale;
-    NodeProcessScaledMutationRate *theta;
-
     PolyProcess *polyprocess{nullptr};
-    PoissonRandomField *poissonrandomfield{nullptr};
 
     PathSuffStatBidimArray *branchcomponentpathsuffstatbidimarray;
     PathSuffStatBidimArray *branchsitepathsuffstatbidimarray;
 
     PathSuffStatArray *rootcomponentpathsuffstatarray;
     PathSuffStatArray *rootsitepathsuffstatarray;
-
-    PolySuffStatBidimArray *taxoncomponentpolysuffstatbidimarray{nullptr};
-    PolySuffStatBidimArray *taxonsitepolysuffstatbidimarray{nullptr};
 
     PoissonSuffStatBranchArray *branchlengthpathsuffstatarray;
     ScatterSuffStat *scattersuffstat;
@@ -315,8 +306,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         data = new FileSequenceAlignment(datafile);
         codondata = new CodonSequenceAlignment(data, true);
 
-        if (PolymorphismAware()) { polydata = new PolyData(codondata, datafile); }
-
         Nsite = codondata->GetNsite();  // # columns
         Ntaxa = codondata->GetNtaxa();
 
@@ -355,11 +344,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         // Chronogram (diff between node ages)
         chronogram = new Chronogram(*nodeages);
 
-        dimensions = 2;
-        if (PolymorphismAware()) {
-            dimensions++;
-            assert(taxon_traits != nullptr);
-        }
+        dimensions = 3;
         if (taxon_traits != nullptr) { dimensions += taxon_traits->GetDim(); }
         prior_matrix = new PriorCovariance(dimensions, prior_cov_df, uniq_kappa);
         precision_matrix = new PrecisionMatrix(*prior_matrix);
@@ -375,21 +360,12 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         nodemutrates->SlidingMove(-1);
         branchmutrates = new BranchProcess(*nodemutrates, arithmetic);
 
-        if (PolymorphismAware()) {
-            // Branch generation rate (nbr of generations per time)
-            nodegentimes = new NodeProcess(*node_multivariate, dim_gen_time);
-            branchgentimes = new BranchProcess(*nodegentimes, arithmetic);
+        // Branch lengths (product of branch mutation rate and chronogram)
+        branchlength = new BranchwiseProduct(*chronogram, *branchmutrates);
 
-            // Branch lengths (product of chronogram and mutation rate, divided by generation time)
-            branchlength =
-                new BranchwiseProductDivision(*chronogram, *branchmutrates, *branchgentimes);
-
-            theta =
-                new NodeProcessScaledMutationRate(theta_scale, nodepopsize, nodemutrates, Ntaxa);
-        } else {
-            // Branch lengths (product of branch mutation rate and chronogram)
-            branchlength = new BranchwiseProduct(*chronogram, *branchmutrates);
-        }
+        // Branch Omega (brownian process)
+        nodeomega = new NodeProcess(*node_multivariate, dim_omega_branch);
+        branchomega = new BranchProcess(*nodeomega, arithmetic);
 
         nucrelratehypercenter.assign(Nrr, 1.0 / Nrr);
         nucrelratehyperinvconc = 1.0 / Nrr;
@@ -462,36 +438,25 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         occupancy = new OccupancySuffStat(Ncat);
 
         // codon matrices per branch and per site
-        branchcomponentcodonmatrixarray = new MutSelNeCodonMatrixBidimArray(
-            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, branchpopsize->GetArray());
+        branchcomponentcodonmatrixarray = new MutSelNeCodonMatrixBidimArray(GetCodonStateSpace(),
+            nucmatrix, componentaafitnessarray, branchpopsize->GetArray(), branchomega->GetArray());
 
         // sub matrices per branch and per site
         branchsitecodonmatrixarray = new BranchComponentMatrixSelector<SubMatrix>(
             branchcomponentcodonmatrixarray, sitealloc, *tree);
 
         rootcomponentcodonmatrixarray = new AAMutSelNeCodonSubMatrixArray(
-            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, root_popsize);
+            GetCodonStateSpace(), nucmatrix, componentaafitnessarray, root_popsize, 1.0);
 
         // sub matrices for root, across sites
         rootsitecodonmatrixarray =
             new RootComponentMatrixSelector<SubMatrix>(rootcomponentcodonmatrixarray, sitealloc);
 
-        // The scaling factor of theta (4*Ne*u) since
-        theta_scale = 1e-5;
-        if (PolymorphismAware()) {
-            poissonrandomfield = new PoissonRandomField(
-                polydata->GetSampleSizeSet(), *GetCodonStateSpace(), precision);
-            polyprocess = new PolyProcess(*GetCodonStateSpace(), *polydata, *poissonrandomfield,
-                *siteaafitnessarray, *nucmatrix, *theta);
-            taxoncomponentpolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Ncat);
-            taxonsitepolysuffstatbidimarray = new PolySuffStatBidimArray(Ntaxa, Nsite);
-        }
 
         phyloprocess = new PhyloProcess(tree.get(), codondata, branchlength, nullptr,
             branchsitecodonmatrixarray, rootsitecodonmatrixarray, polyprocess);
         phyloprocess->Unfold();
 
-        if (PolymorphismAware()) { theta->SetTaxonMap(&phyloprocess->GetTaxonMap()); }
         if (taxon_traits != nullptr) {
             node_multivariate->ClampLeaves(*taxon_traits, phyloprocess->GetTaxonMap());
         }
@@ -526,7 +491,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         model_node(info, "weight", *weight);
         model_node(info, "componentaafitnessarray", *componentaafitnessarray);
         model_node(info, "sitealloc", *sitealloc);
-        if (PolymorphismAware()) { model_node(info, "theta_scale", theta_scale); }
         model_node(info, "chronomove", chronomove);
         model_node(info, "chronoresamblesub", chronoresamblesub);
 
@@ -567,36 +531,27 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         // Descriptive statistics - mean and var of Ne
         model_stat(info, "BranchPopSizeMean", [this]() { return branchpopsize->GetMean(); });
         model_stat(info, "BranchPopSizeVar", [this]() { return branchpopsize->GetVar(); });
-        if (PolymorphismAware()) {
-            // Descriptive statistics - mean and var of the time per generation
-            model_stat(info, "BranchGenTimesMean", [this]() { return branchgentimes->GetMean(); });
-            model_stat(info, "BranchGenTimesVar", [this]() { return branchgentimes->GetVar(); });
 
-            // Descriptive statistics - 4*Ne*u at the leaves of the tree
-            model_stat(info, "ThetaScale", theta_scale);
-            for (int taxon = 0; taxon < Ntaxa; taxon++) {
-                model_stat(info, "*Theta_" + taxonset->GetTaxon(taxon), (*theta)[taxon]);
-            }
-        }
+        // Descriptive statistics - mean and var of Omega
+        model_stat(info, "BranchPopSizeMean", [this]() { return branchomega->GetMean(); });
+        model_stat(info, "BranchPopSizeVar", [this]() { return branchomega->GetVar(); });
         // Descriptive statistics - mutation rate per generation at the root of the tree
         model_stat(info, "RootMutRate", (*nodemutrates)[tree->root()]);
         // Descriptive statistics - Ne under which the root sequence equilibrium is computed
         model_stat(info, "AncestralRootPopSize", root_popsize);
         // Descriptive statistics - Ne at the root of the tree (starting the multivariate process)
         model_stat(info, "RootPopSize", (*nodepopsize)[tree->root()]);
+        model_stat(info, "RootOmega", (*nodeomega)[tree->root()]);
         // Descriptive statistics - time per generation at the root of the tree
-        if (PolymorphismAware()) { model_stat(info, "RootGenTime", (*nodegentimes)[tree->root()]); }
 
         // Descriptive statistics - for each branch of the tree
         for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
             string b_name = tree->node_name(tree->node_index(branch));
             model_stat(info, "*BranchTime_" + b_name, (*chronogram)[branch]);
             model_stat(info, "*BranchMutRate_" + b_name, (*branchmutrates)[branch]);
-            if (PolymorphismAware()) {
-                model_stat(info, "*BranchGenTime_" + b_name, (*branchgentimes)[branch]);
-            }
             model_stat(info, "*BranchLength_" + b_name, (*branchlength)[branch]);
             model_stat(info, "*BranchPopSize_" + b_name, (*branchpopsize)[branch]);
+            model_stat(info, "*BranchOmega_" + b_name, (*branchomega)[branch]);
             model_stat(info, "*BranchdNdS_" + b_name, (*branchdnds)[branch]);
         }
 
@@ -679,12 +634,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         return node_multivariate->GetContrast(node)(dim);
     };
 
-    //! return true if the model handles polymorphism
-    bool PolymorphismAware() const { return polymorphism_aware; };
-
-    //! return theta=4*Ne*u for a given node
-    double GetTheta(Tree::NodeIndex node) const { return theta->GetNodeTheta(node); };
-
     //! return the value of the multivariate brownian process for a given node and a given dimension
     //! of the process
     double GetBrownianEntry(Tree::NodeIndex node, int dim) const {
@@ -698,13 +647,9 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         if (dim == dim_pop_size) {
             return "PopulationSize";
         } else if (dim == dim_mut_rate) {
-            if (PolymorphismAware()) {
-                return "MutationRatePerGeneration";
-            } else {
-                return "MutationRatePerTime";
-            }
-        } else if (dim == dim_gen_time and PolymorphismAware()) {
-            return "GenerationTime";
+            return "MutationRatePerTime";
+        } else if (dim == dim_omega_branch) {
+            return "Omega";
         } else {
             assert(taxon_traits != nullptr);
             return "Traits" + taxon_traits->GetHeader(dim);
@@ -726,6 +671,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     void UpdateCodonMatrices() {
         for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
             branchcomponentcodonmatrixarray->UpdateRowNe(branch, branchpopsize->GetVal(branch));
+            branchcomponentcodonmatrixarray->UpdateRowOmega(branch, branchomega->GetVal(branch));
         }
         rootcomponentcodonmatrixarray->UpdateNe(root_popsize);
     }
@@ -774,8 +720,8 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         chronogram->Update();
         branchpopsize->Update();
         branchmutrates->Update();
-        if (PolymorphismAware()) { branchgentimes->Update(); }
         branchlength->Update();
+        branchomega->Update();
     }
 
     //! \brief Update the chronogram (branch time) and branch lengths around the focal node.
@@ -791,7 +737,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     //! Update needed when the rate (NodeProcess) of the focal node is changed.
     void UpdateLocalBranchRates(Tree::NodeIndex node) {
         branchmutrates->UpdateLocal(node);
-        if (PolymorphismAware()) { branchgentimes->UpdateLocal(node); }
         branchlength->UpdateLocal(node);
     }
 
@@ -810,6 +755,20 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         branchcomponentcodonmatrixarray->UpdateRowNe(branch, branchpopsize->GetVal(branch));
     }
 
+    //! \brief Update the branch Omega around the focal node.
+    //!
+    //! Update needed when the Omega (NodeProcess) of the focal node is changed.
+    void UpdateLocalBranchOmega(Tree::NodeIndex node) {
+        branchomega->UpdateLocal(node);
+        if (!tree->is_root(node)) { UpdateBranchOmega(node); }
+        for (Tree::NodeIndex const &child : tree->children(node)) { UpdateBranchOmega(child); }
+    }
+
+    void UpdateBranchOmega(Tree::NodeIndex node) {
+        Tree::BranchIndex branch = tree->branch_index(node);
+        branchcomponentcodonmatrixarray->UpdateRowOmega(branch, branchomega->GetVal(branch));
+    }
+
     //! \brief Update the root Ne.
     //!
     //! Update needed when the Ne of the root is changed.
@@ -824,7 +783,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     }
 
     void UpdateStats() {
-        if (PolymorphismAware()) { theta->Update(); }
         for (Tree::BranchIndex b = 0; b < Nbranch; b++) { (*branchdnds)[b] = GetPredictedDNDS(b); }
     }
 
@@ -856,7 +814,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
             total += AALogPrior();
         }
 
-        if (PolymorphismAware()) { total += ThetaLogPrior(); }
         return total;
     }
 
@@ -955,22 +912,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         rootcomponentpathsuffstatarray->Add(*rootsitepathsuffstatarray, *sitealloc);
     }
 
-    //! collect sufficient statistics at the tips of the tree
-    void CollectSitePolySuffStat() {
-        if (PolymorphismAware()) {
-            taxonsitepolysuffstatbidimarray->Clear();
-            phyloprocess->AddPolySuffStat(*taxonsitepolysuffstatbidimarray);
-        }
-    }
-
-    //! gather site-specific tips of the tree sufficient statistics component-wise
-    void CollectComponentPolySuffStat() {
-        if (PolymorphismAware()) {
-            taxoncomponentpolysuffstatbidimarray->Clear();
-            taxoncomponentpolysuffstatbidimarray->Add(*taxonsitepolysuffstatbidimarray, *sitealloc);
-        }
-    }
-
     //! collect sufficient statistics for moving branch lengths (directly from the
     //! substitution mappings)
     void CollectLengthSuffStat() {
@@ -995,73 +936,11 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     //  Log probs for MH moves
     //-------------------
 
-    //! return log prob only at the tips due to polymorphism of the substitution mapping,
-    //! as a function of the current codon substitution process
-    double PolySuffStatLogProb() const {
-        //! sum over all components to get log prob
-        if (PolymorphismAware()) {
-            return taxoncomponentpolysuffstatbidimarray->GetLogProb(
-                *poissonrandomfield, *componentaafitnessarray, *nucmatrix, *theta);
-        } else {
-            return 0;
-        }
-    }
-
-    //! return log prob only at the tips due to polymorphism of the substitution
-    //! mapping, over sites allocated to component k of the mixture
-    double ComponentPolySuffStatLogProb(int k) const {
-        // sum over all sites allocated to component k
-        if (PolymorphismAware()) {
-            double tot = 0;
-            for (int taxon = 0; taxon < Ntaxa; taxon++) {
-                tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
-                    *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix,
-                    theta->GetTheta(taxon));
-            }
-            return tot;
-        } else {
-            return 0.0;
-        }
-    }
-
-    //! return log prob only at the tips due to polymorphism of the substitution
-    //! mapping, over sites allocated to component k of the mixture
-    double TaxonPolySuffStatLogProb(int taxon) const {
-        // sum over all sites allocated to component k
-        if (PolymorphismAware()) {
-            double tot = 0;
-            double d_theta = theta->GetTheta(taxon);
-            for (int k = 0; k < Ncat; k++) {
-                tot += taxoncomponentpolysuffstatbidimarray->GetVal(taxon, k).GetLogProb(
-                    *poissonrandomfield, componentaafitnessarray->GetVal(k), *nucmatrix, d_theta);
-            }
-            return tot;
-        } else {
-            return 0.0;
-        }
-    }
-
-    //! return log prob only at the tips due to polymorphism of the substitution
-    //! mapping, for a given sites if allocated to component cat of the mixture
-    double SitePolySuffStatLogProbGivenComponent(int site, int cat) const {
-        if (PolymorphismAware()) {
-            double tot = 0;
-            for (int taxon = 0; taxon < Ntaxa; taxon++) {
-                tot += taxonsitepolysuffstatbidimarray->GetVal(taxon, site)
-                           .GetLogProb(*poissonrandomfield, componentaafitnessarray->GetVal(cat),
-                               *nucmatrix, theta->GetTheta(taxon));
-            }
-            return tot;
-        } else {
-            return 0.0;
-        }
-    }
-
     //! return log prob of the current substitution mapping, as a function of the
     //! current codon substitution process
     double PathSuffStatLogProb() const {
         return branchcomponentpathsuffstatbidimarray->GetLogProb(*branchcomponentcodonmatrixarray) +
-               RootPathSuffStatLogProb() + PolySuffStatLogProb();
+               RootPathSuffStatLogProb();
     }
 
     double RootPathSuffStatLogProb() const {
@@ -1074,8 +953,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         return branchsitepathsuffstatbidimarray->GetColLogProb(
                    site, *branchcomponentcodonmatrixarray, cat) +
                rootsitepathsuffstatarray->GetVal(site).GetLogProb(
-                   rootcomponentcodonmatrixarray->GetVal(cat)) +
-               SitePolySuffStatLogProbGivenComponent(site, cat);
+                   rootcomponentcodonmatrixarray->GetVal(cat));
     }
 
     //! return log prob of the substitution mappings over sites allocated to
@@ -1084,8 +962,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         return branchcomponentpathsuffstatbidimarray->GetColLogProb(
                    cat, *branchcomponentcodonmatrixarray) +
                rootcomponentpathsuffstatarray->GetVal(cat).GetLogProb(
-                   rootcomponentcodonmatrixarray->GetVal(cat)) +
-               ComponentPolySuffStatLogProb(cat);
+                   rootcomponentcodonmatrixarray->GetVal(cat));
     }
 
     //! return log prob of first-level mixture components (i.e. all amino-acid
@@ -1093,8 +970,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     //! of the center and concentration parameters of this component
     double BaseSuffStatLogProb(int k) const {
         return basesuffstatarray->GetVal(k).GetLogProb(
-                   basecenterarray->GetVal(k), 1.0 / baseconcentrationarray->GetVal(k)) +
-               ComponentPolySuffStatLogProb(k);
+            basecenterarray->GetVal(k), 1.0 / baseconcentrationarray->GetVal(k));
     }
 
     // Node ages and branch rates
@@ -1111,9 +987,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     //! node
     double LocalNodeRateLogProb(Tree::NodeIndex node, bool mut_rate_change) const {
         double tot = LocalNodeMultivariateLogPrior(node) + LocalBranchLengthSuffStatLogProb(node);
-        if (mut_rate_change and PolymorphismAware() and tree->is_leaf(node)) {
-            tot += TaxonPolySuffStatLogProb(phyloprocess->GetTaxonMap().NodeToTaxon(node));
-        }
         return tot;
     }
 
@@ -1146,40 +1019,34 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     }
 
     //! \brief log prob to be recomputed when moving Ne (brownian process) around of focal node
-    double LocalNodePopSizeLogProb(Tree::NodeIndex node) const {
-        return LocalNodeMultivariateLogPrior(node) + LocalNodePopSizeSuffStatLogProb(node);
+    double LocalPathSuffStatTotalLogProb(Tree::NodeIndex node) const {
+        return LocalNodeMultivariateLogPrior(node) + LocalNodePathSuffStatLogProb(node);
     }
 
     //! \brief log prob factor (without prior) to be recomputed when moving Ne (brownian process)
     //! around of focal node
-    double LocalNodePopSizeSuffStatLogProb(Tree::NodeIndex node) const {
+    double LocalNodePathSuffStatLogProb(Tree::NodeIndex node) const {
         double tot = 0;
         // for all children
         for (auto const &child : tree->children(node)) {
-            tot += NodePopSizeSuffStatLogProb(tree->branch_index(child));
+            tot += NodePathSuffStatLogProb(tree->branch_index(child));
         }
         if (tree->is_root(node)) {
             // for the root we use the rootpathsuffstat
             tot += RootPathSuffStatLogProb();
         } else {
             // for the branch attached to the node
-            tot += NodePopSizeSuffStatLogProb(tree->branch_index(node));
-        }
-        if (PolymorphismAware() and tree->is_leaf(node)) {
-            tot += TaxonPolySuffStatLogProb(phyloprocess->GetTaxonMap().NodeToTaxon(node));
+            tot += NodePathSuffStatLogProb(tree->branch_index(node));
         }
         return tot;
     }
 
     //! \brief return log prob of current substitution mapping (on focal branch), as a function of
     //! Ne of a given branch
-    double NodePopSizeSuffStatLogProb(Tree::BranchIndex branch) const {
+    double NodePathSuffStatLogProb(Tree::BranchIndex branch) const {
         return branchcomponentpathsuffstatbidimarray->GetRowLogProb(
             branch, *branchcomponentcodonmatrixarray);
     }
-
-    //! log prob factor to be recomputed when Theta=4*Ne*u
-    double ThetaLogProb() const { return ThetaLogPrior() + PolySuffStatLogProb(); }
 
     //! log prob factor to be recomputed when moving nucleotide mutation rate
     //! parameters (nucrelrate and nucstat)
@@ -1263,9 +1130,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
 
     //! complete series of MCMC moves on all parameters (repeated nrep times)
     void MoveParameters(int nrep) {
-        CollectSitePolySuffStat();
         for (int rep = 0; rep < nrep; rep++) {
-            CollectComponentPolySuffStat();
             CollectLengthSuffStat();
 
             ChronoStart("NodeAges");
@@ -1297,12 +1162,19 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
                     ChronoStop("NodeRootPopSizes");
                 }
                 ChronoStart("NodePopSizes");
-                MoveNodePopSizes(0.4, 3, true);
-                MoveNodePopSizes(0.4, 3, false);
-                MoveNodePopSizes(0.2, 3, true);
-                MoveNodePopSizes(0.2, 3, false);
+                MoveAllNodePopSize(0.4, 3, true);
+                MoveAllNodePopSize(0.4, 3, false);
+                MoveAllNodePopSize(0.2, 3, true);
+                MoveAllNodePopSize(0.2, 3, false);
                 ChronoStop("NodePopSizes");
             }
+
+            ChronoStart("NodeOmega");
+            MoveAllNodeOmega(0.4, 3, true);
+            MoveAllNodeOmega(0.4, 3, false);
+            MoveAllNodeOmega(0.2, 3, true);
+            MoveAllNodeOmega(0.2, 3, false);
+            ChronoStop("NodeOmega");
 
             ChronoStart("NodeTraits");
             MoveNodeTraits(0.5, 3, true);
@@ -1320,11 +1192,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
                 ChronoStop("PrecisionMatrix");
             }
 
-            if (PolymorphismAware()) {
-                ChronoStart("Theta");
-                MoveTheta();
-                ChronoStop("Theta");
-            }
 
             if (!clamp_profiles) {
                 ChronoStart("AAMixture");
@@ -1419,11 +1286,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
             for (Tree::NodeIndex node :
                 leaves_to_root ? tree->leaves_root_to_iter() : tree->root_to_leaves_iter()) {
                 MoveNodeRate(node, tuning, true);
-                if (PolymorphismAware() and
-                    (!tree->is_leaf(node) or !taxon_traits->GenTimePresence(
-                                                 phyloprocess->GetTaxonMap().NodeToTaxon(node)))) {
-                    MoveNodeRate(node, tuning, false);
-                }
             }
         }
     }
@@ -1433,14 +1295,14 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         double logratio = -LocalNodeRateLogProb(node, mut_rates);
 
         double m = tuning * (Random::Uniform() - 0.5);
-        (mut_rates ? nodemutrates : nodegentimes)->SlidingMove(node, m);
+        nodemutrates->SlidingMove(node, m);
         UpdateLocalBranchRates(node);
 
         logratio += LocalNodeRateLogProb(node, mut_rates);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
-            (mut_rates ? nodemutrates : nodegentimes)->SlidingMove(node, -m);
+            nodemutrates->SlidingMove(node, -m);
             UpdateLocalBranchRates(node);
         }
         MoveAcceptation(MoveName("NodeRate", tuning), accept);
@@ -1448,7 +1310,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
 
 
     //! MH moves on branch Ne (brownian process)
-    void MoveNodePopSizes(double tuning, int nrep, bool leaves_to_root) {
+    void MoveAllNodePopSize(double tuning, int nrep, bool leaves_to_root) {
         for (int rep = 0; rep < nrep; rep++) {
             for (Tree::NodeIndex node :
                 leaves_to_root ? tree->leaves_root_to_iter() : tree->root_to_leaves_iter()) {
@@ -1459,13 +1321,13 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
 
     //! MH moves on branch Ne (brownian process) for a focal node
     void MoveNodePopSize(Tree::NodeIndex node, double tuning) {
-        double logratio = -LocalNodePopSizeLogProb(node);
+        double logratio = -LocalPathSuffStatTotalLogProb(node);
 
         double m = tuning * (Random::Uniform() - 0.5);
         nodepopsize->SlidingMove(node, m);
         UpdateLocalBranchPopSize(node);
 
-        logratio += LocalNodePopSizeLogProb(node);
+        logratio += LocalPathSuffStatTotalLogProb(node);
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
@@ -1483,25 +1345,38 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         MoveAcceptation(MoveName("RootPopSize", tuning), rate);
     }
 
+    //! MH moves on branch Omega (brownian process)
+    void MoveAllNodeOmega(double tuning, int nrep, bool leaves_to_root) {
+        for (int rep = 0; rep < nrep; rep++) {
+            for (Tree::NodeIndex node :
+                leaves_to_root ? tree->leaves_root_to_iter() : tree->root_to_leaves_iter()) {
+                MoveNodeOmega(node, tuning);
+            }
+        }
+    }
+
+    //! MH moves on branch Ne (brownian process) for a focal node
+    void MoveNodeOmega(Tree::NodeIndex node, double tuning) {
+        double logratio = -LocalPathSuffStatTotalLogProb(node);
+
+        double m = tuning * (Random::Uniform() - 0.5);
+        nodeomega->SlidingMove(node, m);
+        UpdateLocalBranchOmega(node);
+
+        logratio += LocalPathSuffStatTotalLogProb(node);
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) {
+            nodeomega->SlidingMove(node, -m);
+            UpdateLocalBranchOmega(node);
+        }
+        MoveAcceptation(MoveName("NodeOmega", tuning), accept);
+    }
+
     //! MH move on base mixture
     void MoveBase(int nrep) {
         if (baseNcat > 1) { ResampleBaseAlloc(); }
         MoveBaseMixture(nrep);
-    }
-
-
-    //! MH move on theta
-    void MoveTheta() {
-        MoveTheta(1.0, 10);
-        MoveTheta(0.3, 10);
-    }
-
-    //! MH move on theta
-    void MoveTheta(double tuning, int nrep) {
-        double rate =
-            Move::Scaling(theta_scale, tuning, nrep, &BranchOmegaNeSiteMutSelModel::ThetaLogProb,
-                &BranchOmegaNeSiteMutSelModel::NoUpdate, this);
-        MoveAcceptation(MoveName("ThetaScale", tuning), rate);
     }
 
     //! MH move on nucleotide rate parameters

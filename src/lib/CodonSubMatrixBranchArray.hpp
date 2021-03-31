@@ -47,7 +47,7 @@ class MGOmegaCodonSubMatrixBranchArray : public BranchArray<SubMatrix>,
     //! update all matrices
     void UpdateCodonMatrices() {
         for (int i = 0; i < GetNbranch(); i++) {
-            (*this)[i].SetOmega(omegaarray->GetVal(i));
+            (*this)[i].UpdateOmega(omegaarray->GetVal(i));
             (*this)[i].CorruptMatrix();
         }
     }

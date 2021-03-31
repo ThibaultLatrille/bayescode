@@ -11,6 +11,7 @@ static int dim_pop_size = 0;
 static int dim_omega = 0;
 static int dim_mut_rate = 1;
 static int dim_gen_time = 2;
+static int dim_omega_branch = 2;
 
 class PriorCovariance : public EVector {
   private:

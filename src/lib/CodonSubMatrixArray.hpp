@@ -46,7 +46,7 @@ class MGOmegaCodonSubMatrixArray : public Array<SubMatrix>, public Array<MGOmega
     //! update all matrices
     void UpdateCodonMatrices() {
         for (int i = 0; i < GetSize(); i++) {
-            (*this)[i].SetOmega(omegaarray->GetVal(i));
+            (*this)[i].UpdateOmega(omegaarray->GetVal(i));
             (*this)[i].CorruptMatrix();
         }
     }
@@ -60,7 +60,7 @@ class MGOmegaCodonSubMatrixArray : public Array<SubMatrix>, public Array<MGOmega
         }
         for (int i = 0; i < GetSize(); i++) {
             if (occupancy.GetVal(i)) {
-                (*this)[i].SetOmega(omegaarray->GetVal(i));
+                (*this)[i].UpdateOmega(omegaarray->GetVal(i));
                 (*this)[i].CorruptMatrix();
             }
         }
@@ -136,7 +136,7 @@ class AAMutSelOmegaCodonSubMatrixArray : public Array<SubMatrix>,
     //! makes an error (with exit) if this is not the case.
     void SetOmega(double inomega) {
         if (omegaarray) {
-            std::cerr << "error in AAMutSelOmegaCodonSubMatrixArray::SetOmega\n";
+            std::cerr << "error in AAMutSelOmegaCodonSubMatrixArray::UpdateOmega\n";
             exit(1);
         }
         omega = inomega;
@@ -156,9 +156,9 @@ class AAMutSelOmegaCodonSubMatrixArray : public Array<SubMatrix>,
     void UpdateCodonMatrices(bool fitness_recomput = true) {
         for (int i = 0; i < GetSize(); i++) {
             if (omegaarray) {
-                (*this)[i].SetOmega(omegaarray->GetVal(i));
+                (*this)[i].UpdateOmega(omegaarray->GetVal(i));
             } else {
-                (*this)[i].SetOmega(omega);
+                (*this)[i].UpdateOmega(omega);
             }
             if (fitness_recomput) {
                 (*this)[i].CorruptMatrix();
@@ -173,14 +173,14 @@ class AAMutSelOmegaCodonSubMatrixArray : public Array<SubMatrix>,
         if (omegaarray) {
             for (int i = 0; i < GetSize(); i++) {
                 if (!occupancy.GetVal(i)) {
-                    (*this)[i].SetOmega(omegaarray->GetVal(i));
+                    (*this)[i].UpdateOmega(omegaarray->GetVal(i));
                     (*this)[i].CorruptMatrix();
                 }
             }
         } else {
             for (int i = 0; i < GetSize(); i++) {
                 if (!occupancy.GetVal(i)) {
-                    (*this)[i].SetOmega(omega);
+                    (*this)[i].UpdateOmega(omega);
                     (*this)[i].CorruptMatrix();
                 }
             }

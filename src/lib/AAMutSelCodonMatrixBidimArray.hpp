@@ -71,7 +71,7 @@ class AAMutSelCodonMatrixBidimArray : public BidimArray<SubMatrix>,
     //! update all matrices for row i
     void CorruptRowCodonMatrices(int i) {
         for (int j = 0; j < GetNcol(); j++) {
-            matrixarray[i][j]->SetOmega(GetOmega(j));
+            matrixarray[i][j]->UpdateOmega(GetOmega(j));
             matrixarray[i][j]->CorruptMatrix();
         }
     }
@@ -79,7 +79,7 @@ class AAMutSelCodonMatrixBidimArray : public BidimArray<SubMatrix>,
     //! update all matrices for col j
     void CorruptColCodonMatrices(int j) {
         for (int i = 0; i < GetNrow(); i++) {
-            matrixarray[i][j]->SetOmega(GetOmega(j));
+            matrixarray[i][j]->UpdateOmega(GetOmega(j));
             matrixarray[i][j]->CorruptMatrix();
         }
     }

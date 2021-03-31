@@ -296,7 +296,7 @@ class DatedNodeOmegaModel : public ChainComponent {
     //! whichever component is requested later on upon demand.
     void TouchCodonMatrices() {
         codonmatrixbrancharray->UpdateCodonMatrices();
-        rootcodonmatrix->SetOmega(nodeomega->GetExpVal(tree->root()));
+        rootcodonmatrix->UpdateOmega(nodeomega->GetExpVal(tree->root()));
         rootcodonmatrix->CorruptMatrix();
     }
 
@@ -349,11 +349,11 @@ class DatedNodeOmegaModel : public ChainComponent {
     //! Update needed when the omega (NodeProcess) of the focal node is changed.
     void UpdateBranchOmega(Tree::NodeIndex node) {
         if (tree->is_root(node)) {
-            rootcodonmatrix->SetOmega(nodeomega->GetExpVal(tree->root()));
+            rootcodonmatrix->UpdateOmega(nodeomega->GetExpVal(tree->root()));
             rootcodonmatrix->CorruptMatrix();
         } else {
             Tree::BranchIndex branch = tree->branch_index(node);
-            (*codonmatrixbrancharray)[branch].SetOmega(branchomega->GetVal(branch));
+            (*codonmatrixbrancharray)[branch].UpdateOmega(branchomega->GetVal(branch));
             (*codonmatrixbrancharray)[branch].CorruptMatrix();
         }
     }
