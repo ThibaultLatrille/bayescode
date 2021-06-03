@@ -29,6 +29,8 @@ class BranchOmegaNeSiteMutSelArgParse : public BaseArgParse {
         "Move Ne at the root (for the equilibrium frequencies)", cmd, false};
     SwitchArg clamp_pop_sizes{
         "", "clamp_pop_sizes", "Clamp the branch population size", cmd, false};
+    ValueArg<std::string> node_popsize_tag{
+        "", "node_popsize_tag", "The tag in the file", false, "Null", "string", cmd};
     SwitchArg clamp_nuc_matrix{"", "clamp_nuc_matrix", "Clamp the nucleotide matrix", cmd, false};
     SwitchArg clamp_corr_matrix{
         "", "clamp_corr_matrix", "Clamp the correlation matrix", cmd, false};
@@ -76,12 +78,13 @@ int main(int argc, char *argv[]) {
             cmd.chain_name(), inference_args.every.getValue(), inference_args.until.getValue());
         model = std::make_unique<BranchOmegaNeSiteMutSelModel>(inference_args.alignment.getValue(),
             inference_args.treefile.getValue(), args.traitsfile.getValue(),
-            args.profiles.getValue(), args.ncat.getValue(), args.basencat.getValue(),
-            args.condition_aware.getValue(), args.polymorphism_aware.getValue(),
-            args.precision.getValue(), args.arithmetic.getValue(),
-            args.move_root_pop_size.getValue(), args.clamp_pop_sizes.getValue(),
-            args.clamp_nuc_matrix.getValue(), args.clamp_corr_matrix.getValue(),
-            args.fossils.getValue(), args.prior_cov_df.getValue(), args.uniq_kappa.getValue());
+            args.profiles.getValue(), args.node_popsize_tag.getValue(), args.ncat.getValue(),
+            args.basencat.getValue(), args.condition_aware.getValue(),
+            args.polymorphism_aware.getValue(), args.precision.getValue(),
+            args.arithmetic.getValue(), args.move_root_pop_size.getValue(),
+            args.clamp_pop_sizes.getValue(), args.clamp_nuc_matrix.getValue(),
+            args.clamp_corr_matrix.getValue(), args.fossils.getValue(),
+            args.prior_cov_df.getValue(), args.uniq_kappa.getValue());
         model->Update();
     }
     model->ResampleSub(1.0);

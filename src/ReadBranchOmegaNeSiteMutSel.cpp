@@ -11,9 +11,13 @@
 using namespace std;
 using namespace TCLAP;
 
-std::string double2str(double val) {
+std::string double2str(double val, bool scientific_notation = true) {
     std::ostringstream so;
-    so << std::scientific << val;
+    if (scientific_notation) {
+        so << std::scientific << val;
+    } else {
+        so << val;
+    }
     return so.str();
 }
 
@@ -55,9 +59,9 @@ void export_tree(ExportTree export_tree, string name, string const &path,
             auto up = static_cast<size_t>(0.95 * value_array.size());
             if (up >= values.size()) { up = value_array.size() - 1; }
             auto down = static_cast<size_t>(0.05 * value_array.size());
-            export_tree.set_tag(node, name + "_min", double2str(value_array.at(down)));
-            export_tree.set_tag(node, name + "_max", double2str(value_array.at(up)));
-            export_tree.set_tag(node, name, double2str(mean(value_array)));
+            export_tree.set_tag(node, name + "_min", double2str(value_array.at(down), false));
+            export_tree.set_tag(node, name + "_max", double2str(value_array.at(up), false));
+            export_tree.set_tag(node, name, double2str(mean(value_array), false));
         }
     }
     string nhxname = path + "." + name + ".nhx";

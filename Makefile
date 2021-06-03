@@ -142,7 +142,6 @@ mutselomega: _build
 	@cd _build ; make --no-print-directory -j8 mutselomega readmutselomega
 	@rm -rf _mutselomega
 	@mkdir _mutselomega
-
 	_build/mutselomega -a data/bglobin/bglobin.phy -t data/bglobin/bglobin.tre --omegashift 0.0 --freeomega --omegancat 3 -u 30 --flatfitness _mutselomega/flat_bglobin
 	_build/readmutselomega -b 10 _mutselomega/flat_bglobin
 	_build/mutselomega _mutselomega/flat_bglobin
@@ -175,11 +174,11 @@ branchOmegaNe: _build
 	@rm -rf _branchOmegaNe
 	@mkdir _branchOmegaNe
 	@echo "\n\e[35m\e[1m== branch Omega, Ne - Site MutSel run =======================================\e[0m"
-	_build/branchOmegaNeSiteMutsel --ncat 3 -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 20 _branchOmegaNe/branchomegamutsel_gal4
+	_build/branchOmegaNeSiteMutsel --ncat 3 -a data/bglobin/bglobin.phy -t data/bglobin/bglobin.PopSize.nhx --node_popsize_tag "PopulationSize" -u 20 _branchOmegaNe/branchomegamutsel_bglobin
 	@echo "\n\e[35m\e[1m== branch Omega, Ne - Site MutSel read ======================================\e[0m"
-	_build/readbranchOmegaNeSiteMutsel --ss _branchOmegaNe/branchomegamutsel_gal4
+	_build/readbranchOmegaNeSiteMutsel --newick _branchOmegaNe/branchomegamutsel_bglobin
 	@echo "\n\e[35m\e[1m== branch Omega, Ne - Site MutSel read ======================================\e[0m"
-	_build/readbranchOmegaNeSiteMutsel --newick _branchOmegaNe/branchomegamutsel_gal4
+	_build/readbranchOmegaNeSiteMutsel --ss _branchOmegaNe/branchomegamutsel_bglobin
 
 .PHONY: dated
 dated: _build
