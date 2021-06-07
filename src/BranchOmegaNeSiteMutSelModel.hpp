@@ -137,9 +137,6 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     std::string datafile, treefile, traitsfile{"Null"}, profilesfile{"Null"},
         node_popsize_tag{"Null"}, fossilsfile{"Null"};
 
-    bool condition_aware;
-    bool polymorphism_aware;
-    unsigned precision;
     bool arithmetic;
     bool clamp_profiles{false}, move_root_pop_size, clamp_pop_sizes, clamp_nuc_matrix,
         clamp_corr_matrix;
@@ -283,19 +280,15 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     //! - polymorphism_aware: boolean to force using polymorphism data
     BranchOmegaNeSiteMutSelModel(std::string indatafile, std::string intreefile,
         std::string intraitsfile, std::string inprofiles, std::string innode_popsize_tag,
-        int inNcat, int inbaseNcat, bool incondition_aware, bool inpolymorphism_aware,
-        unsigned inprecision, bool inarithmetic, bool inmove_root_pop_size, bool inclamp_pop_sizes,
-        bool inclamp_nuc_matrix, bool inclamp_corr_matrix, std::string infossilsfile,
-        int inprior_cov_df, bool inuniq_kappa)
+        int inNcat, int inbaseNcat, bool inarithmetic, bool inmove_root_pop_size,
+        bool inclamp_pop_sizes, bool inclamp_nuc_matrix, bool inclamp_corr_matrix,
+        std::string infossilsfile, int inprior_cov_df, bool inuniq_kappa)
         : datafile(std::move(indatafile)),
           treefile(std::move(intreefile)),
           traitsfile(std::move(intraitsfile)),
           profilesfile(std::move(inprofiles)),
           node_popsize_tag(std::move(innode_popsize_tag)),
           fossilsfile(std::move(infossilsfile)),
-          condition_aware(incondition_aware),
-          polymorphism_aware(inpolymorphism_aware),
-          precision(inprecision),
           arithmetic(inarithmetic),
           move_root_pop_size(inmove_root_pop_size),
           clamp_pop_sizes(inclamp_pop_sizes),
@@ -331,9 +324,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
 
         taxonset = codondata->GetTaxonSet();
 
-        if (traitsfile != "Null") {
-            taxon_traits = new TaxonTraits(traitsfile, *taxonset, polymorphism_aware);
-        }
+        if (traitsfile != "Null") { taxon_traits = new TaxonTraits(traitsfile, *taxonset, false); }
 
         // get tree from file (newick format)
         std::ifstream tree_stream{treefile};
@@ -1839,9 +1830,8 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<BranchOmegaNeSiteMutS
     std::string model_name, datafile, treefile, traitsfile, profilesfile, node_popsize_tag,
         fossilsfile;
     int Ncat, baseNcat, prior_cov_df;
-    bool condition_aware, polymorphism_aware, arithmetic, move_root_pop_size, clamp_pop_sizes,
-        clamp_nuc_matrix, clamp_corr_matrix, uniq_kappa;
-    unsigned precision;
+    bool arithmetic, move_root_pop_size, clamp_pop_sizes, clamp_nuc_matrix, clamp_corr_matrix,
+        uniq_kappa;
 
     is >> model_name;
     if (model_name != "BranchOmegaNeSiteMutSelModel") {
@@ -1852,12 +1842,11 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<BranchOmegaNeSiteMutS
 
     is >> datafile >> treefile >> traitsfile >> profilesfile >> node_popsize_tag >> fossilsfile;
     is >> Ncat >> baseNcat;
-    is >> condition_aware >> polymorphism_aware >> precision >> arithmetic >> move_root_pop_size >>
-        clamp_pop_sizes >> clamp_nuc_matrix >> clamp_corr_matrix >> prior_cov_df >> uniq_kappa;
+    is >> arithmetic >> move_root_pop_size >> clamp_pop_sizes >> clamp_nuc_matrix >>
+        clamp_corr_matrix >> prior_cov_df >> uniq_kappa;
     m = std::make_unique<BranchOmegaNeSiteMutSelModel>(datafile, treefile, traitsfile, profilesfile,
-        node_popsize_tag, Ncat, baseNcat, condition_aware, polymorphism_aware, precision,
-        arithmetic, move_root_pop_size, clamp_pop_sizes, clamp_nuc_matrix, clamp_corr_matrix,
-        fossilsfile, prior_cov_df, uniq_kappa);
+        node_popsize_tag, Ncat, baseNcat, arithmetic, move_root_pop_size, clamp_pop_sizes,
+        clamp_nuc_matrix, clamp_corr_matrix, fossilsfile, prior_cov_df, uniq_kappa);
     Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
@@ -1879,9 +1868,6 @@ std::ostream &operator<<(std::ostream &os, BranchOmegaNeSiteMutSelModel &m) {
     os << m.fossilsfile << '\t';
     os << m.Ncat << '\t';
     os << m.baseNcat << '\t';
-    os << m.condition_aware << '\t';
-    os << m.polymorphism_aware << '\t';
-    os << m.precision << '\t';
     os << m.arithmetic << '\t';
     os << m.move_root_pop_size << '\t';
     os << m.clamp_pop_sizes << '\t';
