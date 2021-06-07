@@ -138,8 +138,8 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         node_popsize_tag{"Null"}, fossilsfile{"Null"};
 
     bool arithmetic;
-    bool clamp_profiles{false}, move_root_pop_size, clamp_pop_sizes, clamp_nuc_matrix,
-        clamp_corr_matrix;
+    bool clamp_profiles{false}, move_root_pop_size, clamp_pop_sizes, global_pop_size,
+        clamp_nuc_matrix, clamp_corr_matrix;
     std::unique_ptr<const Tree> tree;
 
     FileSequenceAlignment *data;
@@ -281,8 +281,8 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     BranchOmegaNeSiteMutSelModel(std::string indatafile, std::string intreefile,
         std::string intraitsfile, std::string inprofiles, std::string innode_popsize_tag,
         int inNcat, int inbaseNcat, bool inarithmetic, bool inmove_root_pop_size,
-        bool inclamp_pop_sizes, bool inclamp_nuc_matrix, bool inclamp_corr_matrix,
-        std::string infossilsfile, int inprior_cov_df, bool inuniq_kappa)
+        bool inclamp_pop_sizes, bool inglobal_pop_size, bool inclamp_nuc_matrix,
+        bool inclamp_corr_matrix, std::string infossilsfile, int inprior_cov_df, bool inuniq_kappa)
         : datafile(std::move(indatafile)),
           treefile(std::move(intreefile)),
           traitsfile(std::move(intraitsfile)),
@@ -292,6 +292,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
           arithmetic(inarithmetic),
           move_root_pop_size(inmove_root_pop_size),
           clamp_pop_sizes(inclamp_pop_sizes),
+          global_pop_size(inglobal_pop_size),
           clamp_nuc_matrix(inclamp_nuc_matrix),
           clamp_corr_matrix(inclamp_corr_matrix),
           prior_cov_df{inprior_cov_df},
@@ -349,13 +350,13 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         nodepopsize = new NodeProcess(*node_multivariate, dim_pop_size);
         branchpopsize = new BranchProcess(*nodepopsize, arithmetic);
 
-        if (node_popsize_tag != "Null") {
+        if (node_popsize_tag != "Null" and not global_pop_size) {
             for (Tree::NodeIndex node : tree->root_to_leaves_iter()) {
                 (*nodepopsize)[node] = log(stod(parser.get_tree().tag(node, node_popsize_tag)));
             }
             clamp_pop_sizes = true;
             move_root_pop_size = false;
-            root_popsize = (*nodepopsize)[tree->root()];
+            root_popsize = nodepopsize->GetExpVal(tree->root());
         }
 
         // Branch mutation rates (nbr of mutations per generation)
@@ -540,12 +541,13 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         model_stat(info, "BranchPopSizeVar", [this]() { return branchomega->GetVar(); });
         // Descriptive statistics - mutation rate per generation at the root of the tree
         model_stat(info, "RootMutRate", (*nodemutrates)[tree->root()]);
+
         // Descriptive statistics - Ne under which the root sequence equilibrium is computed
         model_stat(info, "AncestralRootPopSize", root_popsize);
         // Descriptive statistics - Ne at the root of the tree (starting the multivariate process)
         model_stat(info, "RootPopSize", (*nodepopsize)[tree->root()]);
+
         model_stat(info, "RootOmega", (*nodeomega)[tree->root()]);
-        // Descriptive statistics - time per generation at the root of the tree
 
         // Descriptive statistics - for each branch of the tree
         for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
@@ -776,6 +778,15 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     //!
     //! Update needed when the Ne of the root is changed.
     void UpdateRootPopSize() { rootcomponentcodonmatrixarray->UpdateNe(root_popsize); }
+
+    void UpdateGlobalPopSize() {
+        branchpopsize->Update();
+        for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
+            branchcomponentcodonmatrixarray->UpdateRowNe(branch, branchpopsize->GetVal(branch));
+        }
+        root_popsize = nodepopsize->GetExpVal(tree->root());
+        rootcomponentcodonmatrixarray->UpdateNe(root_popsize);
+    }
 
     void Update() {
         UpdateBranches();
@@ -1055,6 +1066,12 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     //! parameters (nucrelrate and nucstat)
     double NucRatesLogProb() const { return NucRatesLogPrior() + PathSuffStatLogProb(); }
 
+    //! log prob factor to be recomputed when moving global population size parameters
+    double GlobalPopSizeLogProb() const {
+        return NodeMultivariateLogPrior() + PathSuffStatLogProb();
+    }
+
+
     //! log prob factor to be recomputed when moving aa hyper params (center and
     //! concentration) for component k of base distribution
     double BaseLogProb(int k) const { return BaseLogPrior(k) + BaseSuffStatLogProb(k); }
@@ -1158,18 +1175,23 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
                 ChronoStop("NucRates");
             }
             if (!clamp_pop_sizes) {
-                if (move_root_pop_size) {
-                    ChronoStart("NodeRootPopSizes");
-                    MoveRootPopSize(0.4, 6);
-                    MoveRootPopSize(0.2, 6);
-                    ChronoStop("NodeRootPopSizes");
+                if (global_pop_size) {
+                    MoveGlobalNodePopSize(0.4, 3);
+                    MoveGlobalNodePopSize(0.2, 3);
+                } else {
+                    if (move_root_pop_size) {
+                        ChronoStart("NodeRootPopSizes");
+                        MoveRootPopSize(0.4, 6);
+                        MoveRootPopSize(0.2, 6);
+                        ChronoStop("NodeRootPopSizes");
+                    }
+                    ChronoStart("NodePopSizes");
+                    MoveAllNodePopSize(0.4, 3, true);
+                    MoveAllNodePopSize(0.4, 3, false);
+                    MoveAllNodePopSize(0.2, 3, true);
+                    MoveAllNodePopSize(0.2, 3, false);
+                    ChronoStop("NodePopSizes");
                 }
-                ChronoStart("NodePopSizes");
-                MoveAllNodePopSize(0.4, 3, true);
-                MoveAllNodePopSize(0.4, 3, false);
-                MoveAllNodePopSize(0.2, 3, true);
-                MoveAllNodePopSize(0.2, 3, false);
-                ChronoStop("NodePopSizes");
             }
 
             ChronoStart("NodeOmega");
@@ -1346,6 +1368,30 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
             &BranchOmegaNeSiteMutSelModel::RootPathSuffStatLogProb,
             &BranchOmegaNeSiteMutSelModel::UpdateRootPopSize, this);
         MoveAcceptation(MoveName("RootPopSize", tuning), rate);
+    }
+
+
+    //! MH moves on branch Ne (brownian process)
+    void MoveGlobalNodePopSize(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) { MoveGlobalNodePopSize(tuning); }
+    }
+
+    //! MH moves on branch Ne (brownian process) for a focal node
+    void MoveGlobalNodePopSize(double tuning) {
+        double logratio = -GlobalPopSizeLogProb();
+
+        double m = tuning * (Random::Uniform() - 0.5);
+        nodepopsize->SlidingMove(m);
+        UpdateGlobalPopSize();
+
+        logratio += GlobalPopSizeLogProb();
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) {
+            nodepopsize->SlidingMove(-m);
+            UpdateGlobalPopSize();
+        }
+        MoveAcceptation(MoveName("NodePopSize", tuning), accept);
     }
 
     //! MH moves on branch Omega (brownian process)
@@ -1830,8 +1876,8 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<BranchOmegaNeSiteMutS
     std::string model_name, datafile, treefile, traitsfile, profilesfile, node_popsize_tag,
         fossilsfile;
     int Ncat, baseNcat, prior_cov_df;
-    bool arithmetic, move_root_pop_size, clamp_pop_sizes, clamp_nuc_matrix, clamp_corr_matrix,
-        uniq_kappa;
+    bool arithmetic, move_root_pop_size, clamp_pop_sizes, global_pop_size, clamp_nuc_matrix,
+        clamp_corr_matrix, uniq_kappa;
 
     is >> model_name;
     if (model_name != "BranchOmegaNeSiteMutSelModel") {
@@ -1842,11 +1888,12 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<BranchOmegaNeSiteMutS
 
     is >> datafile >> treefile >> traitsfile >> profilesfile >> node_popsize_tag >> fossilsfile;
     is >> Ncat >> baseNcat;
-    is >> arithmetic >> move_root_pop_size >> clamp_pop_sizes >> clamp_nuc_matrix >>
-        clamp_corr_matrix >> prior_cov_df >> uniq_kappa;
+    is >> arithmetic >> move_root_pop_size >> clamp_pop_sizes >> global_pop_size >>
+        clamp_nuc_matrix >> clamp_corr_matrix >> prior_cov_df >> uniq_kappa;
     m = std::make_unique<BranchOmegaNeSiteMutSelModel>(datafile, treefile, traitsfile, profilesfile,
         node_popsize_tag, Ncat, baseNcat, arithmetic, move_root_pop_size, clamp_pop_sizes,
-        clamp_nuc_matrix, clamp_corr_matrix, fossilsfile, prior_cov_df, uniq_kappa);
+        global_pop_size, clamp_nuc_matrix, clamp_corr_matrix, fossilsfile, prior_cov_df,
+        uniq_kappa);
     Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
@@ -1871,6 +1918,7 @@ std::ostream &operator<<(std::ostream &os, BranchOmegaNeSiteMutSelModel &m) {
     os << m.arithmetic << '\t';
     os << m.move_root_pop_size << '\t';
     os << m.clamp_pop_sizes << '\t';
+    os << m.global_pop_size << '\t';
     os << m.clamp_nuc_matrix << '\t';
     os << m.clamp_corr_matrix << '\t';
     os << m.prior_cov_df << '\t';

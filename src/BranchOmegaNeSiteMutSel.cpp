@@ -44,13 +44,21 @@ class BranchOmegaNeSiteMutSelArgParse : public BaseArgParse {
     void check() {
         if (global_pop_size.getValue() and node_popsize_tag.getValue() != "Null") {
             cout << "One single population size across the tree (--global_pop_size) is not "
-                    "compatible with node specific population sizes (--node_popsize_tag)"
+                    "compatible with node specific population sizes (--node_popsize_tag)."
                  << endl;
+            exit(1);
+        }
+        if (global_pop_size.getValue() and clamp_pop_sizes.getValue()) {
+            cout << "One single population size across the tree (--global_pop_size) is not "
+                    "compatible with clamp population sizes (--clamp_pop_sizes)."
+                 << endl;
+            exit(1);
         }
         if (profiles.getValue() != "Null") {
             cout << "Preferences are clamped (option [--profiles <string>]), thus options [--ncat] "
-                    "and [-basencat] are not used"
+                    "and [-basencat] can not be used"
                  << endl;
+            exit(1);
         }
     }
 };
@@ -78,8 +86,9 @@ int main(int argc, char *argv[]) {
             args.profiles.getValue(), args.node_popsize_tag.getValue(), args.ncat.getValue(),
             args.basencat.getValue(), args.arithmetic.getValue(),
             args.move_root_pop_size.getValue(), args.clamp_pop_sizes.getValue(),
-            args.clamp_nuc_matrix.getValue(), args.clamp_corr_matrix.getValue(),
-            args.fossils.getValue(), args.prior_cov_df.getValue(), args.uniq_kappa.getValue());
+            args.global_pop_size.getValue(), args.clamp_nuc_matrix.getValue(),
+            args.clamp_corr_matrix.getValue(), args.fossils.getValue(),
+            args.prior_cov_df.getValue(), args.uniq_kappa.getValue());
         model->Update();
     }
     model->ResampleSub(1.0);
