@@ -135,11 +135,11 @@ std::tuple<std::vector<std::vector<double>>, std::vector<size_t>> open_preferenc
 
 class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     std::string datafile, treefile, traitsfile{"Null"}, profilesfile{"Null"},
-        node_popsize_tag{"Null"}, fossilsfile{"Null"};
+        node_pop_size_tag{"Null"}, node_omega_tag{"Null"}, fossilsfile{"Null"};
 
     bool arithmetic;
-    bool clamp_profiles{false}, move_root_pop_size, clamp_pop_sizes, global_pop_size,
-        clamp_nuc_matrix, clamp_corr_matrix;
+    bool clamp_profiles{false}, move_root_pop_size, clamp_pop_size, global_pop_size, clamp_omega,
+        global_omega, clamp_nuc_matrix, clamp_corr_matrix;
     std::unique_ptr<const Tree> tree;
 
     FileSequenceAlignment *data;
@@ -279,20 +279,24 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     //! default: 1)
     //! - polymorphism_aware: boolean to force using polymorphism data
     BranchOmegaNeSiteMutSelModel(std::string indatafile, std::string intreefile,
-        std::string intraitsfile, std::string inprofiles, std::string innode_popsize_tag,
-        int inNcat, int inbaseNcat, bool inarithmetic, bool inmove_root_pop_size,
-        bool inclamp_pop_sizes, bool inglobal_pop_size, bool inclamp_nuc_matrix,
-        bool inclamp_corr_matrix, std::string infossilsfile, int inprior_cov_df, bool inuniq_kappa)
+        std::string intraitsfile, std::string inprofiles, std::string innode_pop_size_tag,
+        std::string innode_omega_tag, int inNcat, int inbaseNcat, bool inarithmetic,
+        bool inmove_root_pop_size, bool inclamp_pop_size, bool inglobal_pop_size,
+        bool inclamp_omega, bool inglobal_omega, bool inclamp_nuc_matrix, bool inclamp_corr_matrix,
+        std::string infossilsfile, int inprior_cov_df, bool inuniq_kappa)
         : datafile(std::move(indatafile)),
           treefile(std::move(intreefile)),
           traitsfile(std::move(intraitsfile)),
           profilesfile(std::move(inprofiles)),
-          node_popsize_tag(std::move(innode_popsize_tag)),
+          node_pop_size_tag(std::move(innode_pop_size_tag)),
+          node_omega_tag(std::move(innode_omega_tag)),
           fossilsfile(std::move(infossilsfile)),
           arithmetic(inarithmetic),
           move_root_pop_size(inmove_root_pop_size),
-          clamp_pop_sizes(inclamp_pop_sizes),
+          clamp_pop_size(inclamp_pop_size),
           global_pop_size(inglobal_pop_size),
+          clamp_omega(inclamp_omega),
+          global_omega(inglobal_omega),
           clamp_nuc_matrix(inclamp_nuc_matrix),
           clamp_corr_matrix(inclamp_corr_matrix),
           prior_cov_df{inprior_cov_df},
@@ -350,11 +354,11 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         nodepopsize = new NodeProcess(*node_multivariate, dim_pop_size);
         branchpopsize = new BranchProcess(*nodepopsize, arithmetic);
 
-        if (node_popsize_tag != "Null" and not global_pop_size) {
+        if (node_pop_size_tag != "Null" and not global_pop_size) {
             for (Tree::NodeIndex node : tree->root_to_leaves_iter()) {
-                (*nodepopsize)[node] = log(stod(parser.get_tree().tag(node, node_popsize_tag)));
+                (*nodepopsize)[node] = log(stod(parser.get_tree().tag(node, node_pop_size_tag)));
             }
-            clamp_pop_sizes = true;
+            clamp_pop_size = true;
             move_root_pop_size = false;
             root_popsize = nodepopsize->GetExpVal(tree->root());
         }
@@ -370,6 +374,13 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         // Branch Omega (brownian process)
         nodeomega = new NodeProcess(*node_multivariate, dim_omega_branch);
         branchomega = new BranchProcess(*nodeomega, arithmetic);
+
+        if (node_omega_tag != "Null" and not global_omega) {
+            for (Tree::NodeIndex node : tree->root_to_leaves_iter()) {
+                (*nodeomega)[node] = log(stod(parser.get_tree().tag(node, node_omega_tag)));
+            }
+            clamp_omega = true;
+        }
 
         nucrelratehypercenter.assign(Nrr, 1.0 / Nrr);
         nucrelratehyperinvconc = 1.0 / Nrr;
@@ -788,6 +799,13 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
         rootcomponentcodonmatrixarray->UpdateNe(root_popsize);
     }
 
+    void UpdateGlobalOmega() {
+        branchomega->Update();
+        for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
+            branchcomponentcodonmatrixarray->UpdateRowOmega(branch, branchomega->GetVal(branch));
+        }
+    }
+
     void Update() {
         UpdateBranches();
         UpdateBaseOccupancies();
@@ -1067,7 +1085,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
     double NucRatesLogProb() const { return NucRatesLogPrior() + PathSuffStatLogProb(); }
 
     //! log prob factor to be recomputed when moving global population size parameters
-    double GlobalPopSizeLogProb() const {
+    double PathSuffStatTotalLogProb() const {
         return NodeMultivariateLogPrior() + PathSuffStatLogProb();
     }
 
@@ -1174,7 +1192,7 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
                 MoveNucRates();
                 ChronoStop("NucRates");
             }
-            if (!clamp_pop_sizes) {
+            if (!clamp_pop_size) {
                 if (global_pop_size) {
                     MoveGlobalNodePopSize(0.4, 3);
                     MoveGlobalNodePopSize(0.2, 3);
@@ -1195,10 +1213,17 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
             }
 
             ChronoStart("NodeOmega");
-            MoveAllNodeOmega(0.4, 3, true);
-            MoveAllNodeOmega(0.4, 3, false);
-            MoveAllNodeOmega(0.2, 3, true);
-            MoveAllNodeOmega(0.2, 3, false);
+            if (!clamp_omega) {
+                if (global_omega) {
+                    MoveGlobalNodeOmega(0.4, 3);
+                    MoveGlobalNodeOmega(0.2, 3);
+                } else {
+                    MoveAllNodeOmega(0.4, 3, true);
+                    MoveAllNodeOmega(0.4, 3, false);
+                    MoveAllNodeOmega(0.2, 3, true);
+                    MoveAllNodeOmega(0.2, 3, false);
+                }
+            }
             ChronoStop("NodeOmega");
 
             ChronoStart("NodeTraits");
@@ -1378,13 +1403,13 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
 
     //! MH moves on branch Ne (brownian process) for a focal node
     void MoveGlobalNodePopSize(double tuning) {
-        double logratio = -GlobalPopSizeLogProb();
+        double logratio = -PathSuffStatTotalLogProb();
 
         double m = tuning * (Random::Uniform() - 0.5);
         nodepopsize->SlidingMove(m);
         UpdateGlobalPopSize();
 
-        logratio += GlobalPopSizeLogProb();
+        logratio += PathSuffStatTotalLogProb();
 
         bool accept = (log(Random::Uniform()) < logratio);
         if (!accept) {
@@ -1420,6 +1445,29 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
             UpdateLocalBranchOmega(node);
         }
         MoveAcceptation(MoveName("NodeOmega", tuning), accept);
+    }
+
+    //! MH moves on branch Ne (brownian process)
+    void MoveGlobalNodeOmega(double tuning, int nrep) {
+        for (int rep = 0; rep < nrep; rep++) { MoveGlobalNodeOmega(tuning); }
+    }
+
+    //! MH moves on branch Ne (brownian process) for a focal node
+    void MoveGlobalNodeOmega(double tuning) {
+        double logratio = -PathSuffStatTotalLogProb();
+
+        double m = tuning * (Random::Uniform() - 0.5);
+        nodeomega->SlidingMove(m);
+        UpdateGlobalOmega();
+
+        logratio += PathSuffStatTotalLogProb();
+
+        bool accept = (log(Random::Uniform()) < logratio);
+        if (!accept) {
+            nodeomega->SlidingMove(-m);
+            UpdateGlobalOmega();
+        }
+        MoveAcceptation(MoveName("NodePopSize", tuning), accept);
     }
 
     //! MH move on base mixture
@@ -1873,11 +1921,11 @@ class BranchOmegaNeSiteMutSelModel : public ChainComponent {
 };
 
 std::istream &operator>>(std::istream &is, std::unique_ptr<BranchOmegaNeSiteMutSelModel> &m) {
-    std::string model_name, datafile, treefile, traitsfile, profilesfile, node_popsize_tag,
-        fossilsfile;
+    std::string model_name, datafile, treefile, traitsfile, profilesfile, node_pop_size_tag,
+        node_omega_tag, fossilsfile;
     int Ncat, baseNcat, prior_cov_df;
-    bool arithmetic, move_root_pop_size, clamp_pop_sizes, global_pop_size, clamp_nuc_matrix,
-        clamp_corr_matrix, uniq_kappa;
+    bool arithmetic, move_root_pop_size, clamp_pop_size, global_pop_size, clamp_omega,
+        global_omega, clamp_nuc_matrix, clamp_corr_matrix, uniq_kappa;
 
     is >> model_name;
     if (model_name != "BranchOmegaNeSiteMutSelModel") {
@@ -1886,14 +1934,15 @@ std::istream &operator>>(std::istream &is, std::unique_ptr<BranchOmegaNeSiteMutS
         exit(1);
     }
 
-    is >> datafile >> treefile >> traitsfile >> profilesfile >> node_popsize_tag >> fossilsfile;
+    is >> datafile >> treefile >> traitsfile >> profilesfile >> node_pop_size_tag >>
+        node_omega_tag >> fossilsfile;
     is >> Ncat >> baseNcat;
-    is >> arithmetic >> move_root_pop_size >> clamp_pop_sizes >> global_pop_size >>
-        clamp_nuc_matrix >> clamp_corr_matrix >> prior_cov_df >> uniq_kappa;
+    is >> arithmetic >> move_root_pop_size >> clamp_pop_size >> global_pop_size >> clamp_omega >>
+        global_omega >> clamp_nuc_matrix >> clamp_corr_matrix >> prior_cov_df >> uniq_kappa;
     m = std::make_unique<BranchOmegaNeSiteMutSelModel>(datafile, treefile, traitsfile, profilesfile,
-        node_popsize_tag, Ncat, baseNcat, arithmetic, move_root_pop_size, clamp_pop_sizes,
-        global_pop_size, clamp_nuc_matrix, clamp_corr_matrix, fossilsfile, prior_cov_df,
-        uniq_kappa);
+        node_pop_size_tag, node_omega_tag, Ncat, baseNcat, arithmetic, move_root_pop_size,
+        clamp_pop_size, global_pop_size, clamp_omega, global_omega, clamp_nuc_matrix,
+        clamp_corr_matrix, fossilsfile, prior_cov_df, uniq_kappa);
     Tracer tracer{*m};
     tracer.read_line(is);
     m->Update();
@@ -1909,16 +1958,20 @@ std::ostream &operator<<(std::ostream &os, BranchOmegaNeSiteMutSelModel &m) {
     os << m.traitsfile << '\t';
     assert(!m.profilesfile.empty());
     os << m.profilesfile << '\t';
-    assert(!m.node_popsize_tag.empty());
-    os << m.node_popsize_tag << '\t';
+    assert(!m.node_pop_size_tag.empty());
+    os << m.node_pop_size_tag << '\t';
+    assert(!m.node_omega_tag.empty());
+    os << m.node_omega_tag << '\t';
     assert(!m.fossilsfile.empty());
     os << m.fossilsfile << '\t';
     os << m.Ncat << '\t';
     os << m.baseNcat << '\t';
     os << m.arithmetic << '\t';
     os << m.move_root_pop_size << '\t';
-    os << m.clamp_pop_sizes << '\t';
+    os << m.clamp_pop_size << '\t';
     os << m.global_pop_size << '\t';
+    os << m.clamp_omega << '\t';
+    os << m.global_omega << '\t';
     os << m.clamp_nuc_matrix << '\t';
     os << m.clamp_corr_matrix << '\t';
     os << m.prior_cov_df << '\t';

@@ -24,12 +24,16 @@ class BranchOmegaNeSiteMutSelArgParse : public BaseArgParse {
         "c", "profiles", "Preferences profiles (to clamp)", false, "Null", "string", cmd};
     SwitchArg move_root_pop_size{"", "move_root_pop_size",
         "Move Ne at the root (for the equilibrium frequencies)", cmd, false};
-    SwitchArg clamp_pop_sizes{
-        "", "clamp_pop_sizes", "Clamp the branch population size", cmd, false};
-    ValueArg<std::string> node_popsize_tag{"", "node_popsize_tag",
+    SwitchArg clamp_pop_size{
+        "", "clamp_pop_size", "Clamp the branch population size", cmd, false};
+    ValueArg<std::string> node_pop_size_tag{"", "node_pop_size_tag",
         "The tag in the file to clamp the node population sizes", false, "Null", "string", cmd};
     SwitchArg global_pop_size{
         "", "global_pop_size", "One single population size across the tree", cmd, false};
+    SwitchArg clamp_omega{"", "clamp_omega", "Clamp the branch omega", cmd, false};
+    ValueArg<std::string> node_omega_tag{"", "node_omega_tag",
+        "The tag in the file to clamp the node omega", false, "Null", "string", cmd};
+    SwitchArg global_omega{"", "global_omega", "One single omega across the tree", cmd, false};
     SwitchArg clamp_nuc_matrix{"", "clamp_nuc_matrix", "Clamp the nucleotide matrix", cmd, false};
     SwitchArg clamp_corr_matrix{
         "", "clamp_corr_matrix", "Clamp the correlation matrix", cmd, false};
@@ -42,15 +46,33 @@ class BranchOmegaNeSiteMutSelArgParse : public BaseArgParse {
         "Unique kappa for the invert Wishart matrix prior (otherwise 1 for each dimension)", cmd,
         false};
     void check() {
-        if (global_pop_size.getValue() and node_popsize_tag.getValue() != "Null") {
+        if (global_pop_size.getValue() and node_pop_size_tag.getValue() != "Null") {
             cout << "One single population size across the tree (--global_pop_size) is not "
-                    "compatible with node specific population sizes (--node_popsize_tag)."
+                    "compatible with node specific population sizes (--node_pop_size_tag)."
                  << endl;
             exit(1);
         }
-        if (global_pop_size.getValue() and clamp_pop_sizes.getValue()) {
+        if (global_pop_size.getValue() and clamp_pop_size.getValue()) {
             cout << "One single population size across the tree (--global_pop_size) is not "
-                    "compatible with clamp population sizes (--clamp_pop_sizes)."
+                    "compatible with clamp population sizes (--clamp_pop_size)."
+                 << endl;
+            exit(1);
+        }
+        if (global_pop_size.getValue() and profiles.getValue() == "Null") {
+            cout << "One single population size across the tree (--global_pop_size), profiles "
+                    "should be fixed and given as input with the argument --profiles. Otherwise "
+                    "the model is not identifiable."
+                 << endl;
+        }
+        if (global_omega.getValue() and node_omega_tag.getValue() != "Null") {
+            cout << "One single omega across the tree (--global_omega) is not "
+                    "compatible with node specific omega (--node_omega_tag)."
+                 << endl;
+            exit(1);
+        }
+        if (global_omega.getValue() and clamp_omega.getValue()) {
+            cout << "One single omega across the tree (--global_omega) is not "
+                    "compatible with clamp omega (--clamp_omega)."
                  << endl;
             exit(1);
         }
@@ -83,12 +105,13 @@ int main(int argc, char *argv[]) {
             cmd.chain_name(), inference_args.every.getValue(), inference_args.until.getValue());
         model = std::make_unique<BranchOmegaNeSiteMutSelModel>(inference_args.alignment.getValue(),
             inference_args.treefile.getValue(), args.traitsfile.getValue(),
-            args.profiles.getValue(), args.node_popsize_tag.getValue(), args.ncat.getValue(),
-            args.basencat.getValue(), args.arithmetic.getValue(),
-            args.move_root_pop_size.getValue(), args.clamp_pop_sizes.getValue(),
-            args.global_pop_size.getValue(), args.clamp_nuc_matrix.getValue(),
-            args.clamp_corr_matrix.getValue(), args.fossils.getValue(),
-            args.prior_cov_df.getValue(), args.uniq_kappa.getValue());
+            args.profiles.getValue(), args.node_pop_size_tag.getValue(),
+            args.node_omega_tag.getValue(), args.ncat.getValue(), args.basencat.getValue(),
+            args.arithmetic.getValue(), args.move_root_pop_size.getValue(),
+            args.clamp_pop_size.getValue(), args.global_pop_size.getValue(),
+            args.clamp_omega.getValue(), args.global_omega.getValue(),
+            args.clamp_nuc_matrix.getValue(), args.clamp_corr_matrix.getValue(),
+            args.fossils.getValue(), args.prior_cov_df.getValue(), args.uniq_kappa.getValue());
         model->Update();
     }
     model->ResampleSub(1.0);
