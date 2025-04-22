@@ -194,12 +194,30 @@ dated: tiny
 	bin/nodeomega -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick -u 20 _dated/nodeomega_gal4
 	bin/nodeomega _dated/nodeomega_gal4
 	bin/readnodeomega --newick -b 10 -u 20 _dated/nodeomega_gal4
+	bin/readnodeomega --newick -b 10 -u 20 --output _dated/nodeomega_gal4.LogSpace _dated/nodeomega_gal4
+	bin/readnodeomega --newick_trees -b 10 -u 20 _dated/nodeomega_gal4
 	bin/readnodeomega --cov -b 10 -u 20 _dated/nodeomega_gal4
 	bin/nodemutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick --ncat 3 -u ${POINTS} _dated/node_gal4
 	bin/nodemutsel _dated/node_gal4
 	bin/readnodemutsel _dated/node_gal4
+	bin/readnodemutsel --newick -b 0 -u ${POINTS} _dated/node_gal4
+	bin/readnodemutsel --newick_trees -b 0 -u ${POINTS} _dated/node_gal4
 	# bin/nodemutsel -a data/polymorphism/gal4.ali -t data/polymorphism/gal4.newick --ncat 3 -u ${POINTS} -p _dated/node_poly_gal4
 	# bin/nodemutsel _dated/node_poly_gal4
+
+.PHONY: placentalia
+placentalia: tiny
+	@cd bin ; make --no-print-directory -j8 nodemutsel
+	@rm -rf _placentalia
+	@mkdir _placentalia
+	bin/nodeomega -a data/placentalia/plac.ali -t data/placentalia/plac.nhx --traitsfile data/placentalia/plac.log.lht -u 20 _placentalia/nodeomega_plac
+	bin/nodeomega _placentalia/nodeomega_plac
+	bin/readnodeomega --newick -b 10 -u 20 _placentalia/nodeomega_plac
+	bin/readnodeomega --newick -b 10 -u 20 --same_space_as_input_traits --output _placentalia/nodeomega_plac.InputSpace _placentalia/nodeomega_plac
+	bin/readnodeomega --newick_trees -b 10 -u 20 _placentalia/nodeomega_plac
+	bin/readnodeomega --newick_trees -b 10 -u 20 --same_space_as_input_traits --output _placentalia/nodeomega_plac.InputSpace _placentalia/nodeomega_plac
+	bin/readnodeomega --cov -b 10 -u 20 _placentalia/nodeomega_plac
+
 
 .PHONY: traits
 traits: tiny
