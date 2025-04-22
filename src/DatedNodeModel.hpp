@@ -237,6 +237,14 @@ class DatedNodeModel : public ChainComponent {
         scattersuffstat->SamplePrecisionMatrix(*precision_matrix, *prior_matrix);
     };
 
+
+    //! recompute the precision matrix and update the covariance matrix
+    void RecomputePrecisionMatrix() {
+        CollectScatterSuffStat();
+        SamplePrecisionMatrix();
+        precision_matrix->UpdateCovarianceMatrix(*cov_matrix);
+    }
+
     //! MH moves on the invert wishart matrix (prior of the covariance matrix)
     void MovePriorMatrix(double tuning, int nrep) {
         if (uniq_kappa) {

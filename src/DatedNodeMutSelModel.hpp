@@ -596,6 +596,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         if (PolymorphismAware()) { model_stat(info, "RootGenTime", (*nodegentimes)[tree->root()]); }
 
         // Descriptive statistics - for each branch of the tree
+        /*
         for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
             string b_name = tree->node_name(tree->node_index(branch));
             model_stat(info, "*BranchTime_" + b_name, (*chronogram)[branch]);
@@ -607,7 +608,7 @@ class DatedNodeMutSelModel : public ChainComponent {
             model_stat(info, "*BranchPopSize_" + b_name, (*branchpopsize)[branch]);
             model_stat(info, "*BranchdNdS_" + b_name, (*branchdnds)[branch]);
         }
-
+        */
         // Descriptive statistics - for chrono
         model_stat(
             info, "ChronoMove", [&]() { return chronomove / (chronomove + chronoresamblesub); });
@@ -681,6 +682,19 @@ class DatedNodeMutSelModel : public ChainComponent {
         return branchlength->GetVal(tree->branch_index(node));
     };
 
+    //! return branch population size
+    double GetBranchPopSize(Tree::NodeIndex node) const {
+        assert(!tree->is_root(node));
+        return branchpopsize->GetVal(tree->branch_index(node));
+    };
+
+    //! return branch mutation rate
+    double GetBranchMutRate(Tree::NodeIndex node) const {
+        assert(!tree->is_root(node));
+        return branchmutrates->GetVal(tree->branch_index(node));
+    };
+
+
     //! return contrast for a given node and dimension
     double GetContrast(Tree::NodeIndex node, int dim) const {
         assert(!tree->is_root(node));
@@ -702,7 +716,13 @@ class DatedNodeMutSelModel : public ChainComponent {
     //! return the value of the multivariate brownian process for a given node and a given dimension
     //! of the process
     double GetExpBrownianEntry(Tree::NodeIndex node, int dim) const {
-        return exp(node_multivariate->GetVal(node)(dim));
+        return exp(GetBrownianEntry(node, dim));
+    }
+
+    //! return the value of the multivariate brownian process for a given node and a given dimension
+    //! of the process
+    double GetBrownianEntry(Tree::NodeIndex node, int dim) const {
+        return node_multivariate->GetVal(node)(dim);
     }
 
     //! return number of dimensions of the multivariate brownian process
@@ -790,7 +810,7 @@ class DatedNodeMutSelModel : public ChainComponent {
         branchmutrates->Update();
         if (PolymorphismAware()) { branchgentimes->Update(); }
         branchlength->Update();
-        if (scale) {chronogram->Scale();}
+        if (scale) { chronogram->Scale(); }
     }
 
     //! \brief Update the chronogram (branch time) and branch lengths around the focal node.
@@ -840,7 +860,7 @@ class DatedNodeMutSelModel : public ChainComponent {
 
     void UpdateStats() {
         if (PolymorphismAware()) { theta->Update(); }
-        for (Tree::BranchIndex b = 0; b < Nbranch; b++) { (*branchdnds)[b] = GetPredictedDNDS(b);}
+        for (Tree::BranchIndex b = 0; b < Nbranch; b++) { (*branchdnds)[b] = GetPredictedDNDS(b); }
         precision_matrix->UpdateCovarianceMatrix(*cov_matrix);
     }
 
@@ -1356,6 +1376,14 @@ class DatedNodeMutSelModel : public ChainComponent {
     void SamplePrecisionMatrix() {
         scattersuffstat->SamplePrecisionMatrix(*precision_matrix, *prior_matrix);
     };
+
+
+    //! recompute the precision matrix and update the covariance matrix
+    void RecomputePrecisionMatrix() {
+        CollectScatterSuffStat();
+        SamplePrecisionMatrix();
+        precision_matrix->UpdateCovarianceMatrix(*cov_matrix);
+    }
 
     //! MH moves on the invert wishart matrix (prior of the covariance matrix)
     void MovePriorMatrix(double tuning, int nrep) {

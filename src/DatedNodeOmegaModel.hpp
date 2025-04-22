@@ -226,6 +226,7 @@ class DatedNodeOmegaModel : public ChainComponent {
             }
         }
         // Descriptive statistics - for each branch of the tree
+        /*
         for (Tree::BranchIndex branch = 0; branch < tree->nb_branches(); branch++) {
             string b_name = tree->node_name(tree->node_index(branch));
             model_stat(info, "*BranchTime_" + b_name, (*chronogram)[branch]);
@@ -233,6 +234,7 @@ class DatedNodeOmegaModel : public ChainComponent {
             model_stat(info, "*BranchLength_" + b_name, (*branchlength)[branch]);
             model_stat(info, "*BranchdNdS_" + b_name, (*branchomega)[branch]);
         }
+        */
 
         model_stat(info, "PredictedDNDS", [this]() { return branchomega->GetMean(); });
         model_stat(info, "statent", [&]() { return Random::GetEntropy(nucstat); });
@@ -266,18 +268,35 @@ class DatedNodeOmegaModel : public ChainComponent {
         return branchlength->GetVal(tree->branch_index(node));
     };
 
+    //! return branch omega
+    double GetBranchOmega(Tree::NodeIndex node) const {
+        assert(!tree->is_root(node));
+        return branchomega->GetVal(tree->branch_index(node));
+    };
+
+    //! return branch mutation rate
+    double GetBranchMutRate(Tree::NodeIndex node) const {
+        assert(!tree->is_root(node));
+        return branchrates->GetVal(tree->branch_index(node));
+    };
+
     //! return precision matrix
     PrecisionMatrix GetPrecisionMatrix() const { return *precision_matrix; };
 
     //! return covariance matrix
     EMatrix GetCovarianceMatrix() const { return *cov_matrix; };
 
-    //! return the value of the multivariate brownian process for a given node and a given
-    //! dimensions of the process
+    //! return the value of the multivariate brownian process (exp space) for a given node and a given dimension
+    //! of the process
     double GetExpBrownianEntry(Tree::NodeIndex node, int dim) const {
-        return exp(node_multivariate->GetVal(node)(dim));
+        return exp(GetBrownianEntry(node, dim));
     }
 
+    //! return the value of the multivariate brownian process (log space) for a given node and a given dimension
+    //! of the process
+    double GetBrownianEntry(Tree::NodeIndex node, int dim) const {
+        return node_multivariate->GetVal(node)(dim);
+    }
     //! return number of dimensions of the multivariate brownian process
     int GetDimension() const { return dimensions; }
 
@@ -626,9 +645,17 @@ class DatedNodeOmegaModel : public ChainComponent {
         precision_matrix->UpdateCovarianceMatrix(*cov_matrix);
     }
 
+    //! Sample the precision matrix from scatter sufficient statistics
     void SamplePrecisionMatrix() {
         scattersuffstat->SamplePrecisionMatrix(*precision_matrix, *prior_matrix);
     };
+
+    //! recompute the precision matrix and update the covariance matrix
+    void RecomputePrecisionMatrix() {
+        CollectScatterSuffStat();
+        SamplePrecisionMatrix();
+        precision_matrix->UpdateCovarianceMatrix(*cov_matrix);
+    }
 
     //! MH moves on the invert wishart matrix (prior of the covariance matrix)
     void MovePriorMatrix(double tuning, int nrep) {

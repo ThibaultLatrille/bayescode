@@ -24,6 +24,16 @@ class ReadNodeArgParse : public ReadArgParse {
         "For each trait, results are written in {chain_name}.{trait}.nhx by default (optionally "
         "use the --output argument to specify a different output path).",
         cmd};
+    SwitchArg newick_trees{"n", "newick_trees",
+        "Export the node-specific entries of the multivariate Brownian process for each point of "
+        "the MCMC. "
+        "All entries of the multivariate Brownian process are written in a single file (.trees), "
+        "containing as many lines as points in the MCMC. "
+        "Each point of the MCMC (each line of the .trees file) is formatted as a newick extended "
+        "tree (NHX). "
+        "Results are written in {chain_name}.trees by default (optionally use the --output "
+        "argument to specify a different output path).",
+        cmd};
     SwitchArg wAIC{"w", "wAIC",
         "Computes the wAIC for the model."
         "Results are written in {chain_name}.wAIC.txt by default (optionally "
@@ -279,17 +289,22 @@ int main(int argc, char* argv[]) {
         EMatrix precision_matrix = EMatrix::Zero(model->GetDimension(), model->GetDimension());
         EMatrix partial_posterior_prob =
             EMatrix::Zero(model->GetDimension(), model->GetDimension());
+        int count = 0;
         for (int step = 0; step < size; step++) {
             cerr << '.';
             cr.skip(every);
             EMatrix cov_matrix_chain = model->GetCovarianceMatrix();
             EMatrix precision_matrix_chain = model->GetPrecisionMatrix();
+            bool is_positive = true;
             for (int i = 0; i < model->GetDimension(); i++) {
-                if (cov_matrix_chain(i, i) <= 0) {
-                    std::cerr << "error: negative or null variance\n";
-                    exit(1);
-                }
+                if (cov_matrix_chain(i, i) <= 0) { is_positive = false; }
             }
+            if (!is_positive) {
+                model->RecomputePrecisionMatrix();
+                cov_matrix_chain = model->GetCovarianceMatrix();
+                precision_matrix_chain = model->GetPrecisionMatrix();
+            }
+            count++;
             cov_matrix += cov_matrix_chain;
             precision_matrix += precision_matrix_chain;
             for (int i = 0; i < model->GetDimension(); i++) {
@@ -301,11 +316,11 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        cov_matrix /= size;
-        posterior_prob /= size;
-        precision_matrix /= size;
-        partial_posterior_prob /= size;
-
+        cov_matrix /= count;
+        posterior_prob /= count;
+        precision_matrix /= count;
+        partial_posterior_prob /= count;
+        std::cerr << "Counted " << count << " steps out of " << size << endl;
         EMatrix cor_matrix = EMatrix::Zero(model->GetDimension(), model->GetDimension());
         EMatrix partial_cor_matrix = EMatrix::Zero(model->GetDimension(), model->GetDimension());
         for (int i = 0; i < model->GetDimension(); i++) {
@@ -368,6 +383,30 @@ int main(int argc, char* argv[]) {
             export_tree(base_export_tree, model->GetDimensionName(dim), read_args.OutputFile(),
                 dim_node_traces[dim]);
         }
+    } else if (read_args.newick_trees.getValue()) {
+        string nhxname = read_args.OutputFile(".trees");
+        std::ofstream nhx(nhxname);
+        for (int step = 0; step < size; step++) {
+            cerr << '.';
+            cr.skip(every);
+
+            model->Update();
+            ExportTree export_tree(model->GetTree());
+            for (Tree::NodeIndex node = 0; node < Tree::NodeIndex(model->GetTree().nb_nodes());
+                node++) {
+                if (!model->GetTree().is_root(node)) {
+                    export_tree.set_tag(node, "length", to_string(model->GetBranchTime(node)));
+                }
+                for (int dim{0}; dim < model->GetDimension(); dim++) {
+                    export_tree.set_tag(node, model->GetDimensionName(dim),
+                        to_string(model->GetBrownianEntry(node, dim)));
+                }
+            }
+            nhx << export_tree.as_string() << std::endl;
+        }
+        cerr << '\n';
+        nhx.close();
+        std::cerr << "Trees in " << nhxname << "\n";
     } else if (read_args.wAIC.getValue()) {
         vector<vector<double>> leaf_log_probs(model->GetTree().nb_nodes());
 
@@ -414,7 +453,7 @@ int main(int argc, char* argv[]) {
                 i++;
             }
         }
-    } else {
+    }  else {
         stats_posterior<DatedNodeModel>(*model, cr, every, size);
     }
 }
