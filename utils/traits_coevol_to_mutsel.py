@@ -52,7 +52,14 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    descr = ("A script to convert a CoEvol trait file (.nexus) to a BayesCode trait file (.tsv).\n"
+             "The script will read the CoEvol file and write it in a new file in MutSel format.\n"
+             "The CoEvol file must contain a header with the number of taxa and the number of traits.\n"
+             "The script will convert the data to log-space using the function y=log(x).\n"
+             "The output file will be in tab-separated format with the first column containing the taxon names.\n"
+             "The script will also check that the number of taxa and traits in the header matches the number of taxa and traits in the data.\n")
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=descr)
     parser.add_argument('--input', required=True, type=str, dest="input", help="Input trait file (CoEvol format).")
-    parser.add_argument('--output', required=True, type=str, dest="output", help="Output trait file (MutSel format).")
+    parser.add_argument('--output', required=True, type=str, dest="output", help="Output trait file (BayesCode format).")
     main(parser.parse_args())

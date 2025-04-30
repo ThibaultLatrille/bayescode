@@ -2,6 +2,8 @@
 import argparse
 from glob import glob
 from itertools import chain
+
+import numpy as np
 import pandas as pd
 from ete3 import Tree
 import matplotlib
@@ -37,7 +39,7 @@ def label_transform(s):
         return s
 
 
-def get_annot(n, f):
+def get_annot(n: Tree, f: str) -> float:
     return float(getattr(n, f))
 
 
@@ -117,7 +119,7 @@ def plot_tree(path, feature, font_size=14, line_type="-", vt_line_width=0.5, hz_
         nodex.append(x)
         nodey.append(y)
 
-    pd.DataFrame(rows).to_csv(path.replace('.nhx', '.tsv'), index=None, header=rows[0].keys(), sep='\t')
+    pd.DataFrame(rows).to_csv(path.replace('.nhx', '.tsv'), index=False, sep='\t', header=list(rows[0].keys()))
     vline_col = LineCollection(vlinec, colors=[color_map.to_rgba(l) for l in vlines],
                                linestyle=line_type,
                                linewidth=vt_line_width * 2)
@@ -155,14 +157,21 @@ def plot_tree(path, feature, font_size=14, line_type="-", vt_line_width=0.5, hz_
 def main(args):
     for path in glob(f"{args.input}.*.nhx"):
         feature = path.split(".")[-2]
-        if feature in ["ContrastPopulationSize", "BranchTime", "BranchLength"]:
+        if feature.startswith("Branch") or feature == "ContrastPopulationSize":
             continue
         plot_tree(path, feature)
         print("Done: " + path)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    descr = (
+        "This script processes and visualizes phylogenetic trees in the New Hampshire X (.nhx) format from the input directory (--input).\n"
+        "It reads .nhx files from the input directory, extracts features (e.g., annotations like population size or mutation rate) from tree nodes.\n"
+        "Nodes are colored based on the values of these features and branch are colored as a gradient.\n"
+        "The script outputs a .pdf file for each tree visualization and a .tsv file containing extracted feature values for leaves.\n"
+        "It skips certain features (e.g., Branch or ContrastPopulationSize) and adjusts scaling and formatting for the visualizations.\n"
+    )
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=descr)
     parser.add_argument('-i', '--input', required=True, type=str, dest="input")
     args = parser.parse_args()
     main(args)

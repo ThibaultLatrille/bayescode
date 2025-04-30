@@ -166,7 +166,14 @@ def main(input_traits: str, input_tree: str, input_var_within: str, output_tsv: 
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    descr = ("A script to obtain the neutrality index using maximum likelihood computation.\n"
+             "It requires three input files:\n"
+             "--tree: a phylogenetic tree in newick format, with branch lengths in number of substitutions per site (neutral markers).\n"
+             "--traitsfile: a file containing the mean trait values for each species.\n"
+             "--var_within: a file containing the variation within species for each trait and the genetic variation within species (neutral markers).\n"
+             "The script will output a file containing the neutrality index for each trait (--output).\n"
+             )
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=descr)
     parser.add_argument("--traitsfile", help="Input trait file", required=True)
     parser.add_argument("--var_within", help="Input var_within file", required=True)
     parser.add_argument("--tree", help="Input tree file", required=True)

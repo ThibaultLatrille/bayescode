@@ -63,8 +63,13 @@ def main(args):
 
 
 if __name__ == '__main__':
-    p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    p.add_argument('--tree', required=True, type=str, dest="tree", help="Input newick tree")
-    p.add_argument('--input', required=True, type=str, dest="input", help="Input calibration file (CoEvol format)")
-    p.add_argument('--output', required=True, type=str, dest="output", help="Output calibration file (MutSel format)")
-    main(p.parse_args())
+    descr = ("A script to convert a CoEvol calibration file to a BayesCode calibration file (.tsv).\n"
+             "The script needs also a newick tree file to find the most recent common ancestors.\n"
+             "If internal node names are not present in the tree, they will be generated and the tree will be rewritten.\n"
+             )
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=descr)
+    parser.add_argument('--tree', required=True, type=str, dest="tree", help="Input newick tree")
+    parser.add_argument('--input', required=True, type=str, dest="input", help="Input calibration file (CoEvol format)")
+    parser.add_argument('--output', required=True, type=str, dest="output",
+                   help="Output calibration file (BayesCode format)")
+    main(parser.parse_args())

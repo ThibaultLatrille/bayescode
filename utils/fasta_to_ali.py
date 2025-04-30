@@ -56,7 +56,14 @@ def main(args):
 
 if __name__ == '__main__':
     # Parse arguments
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    descr = "A script to convert a fasta file to a phylip file.\n"
+    descr += "The script will read the fasta file and write it in a new file in phylip format.\n\n"
+    descr += "The fasta format is alternating the name of the sequence (starting with >) and the sequence itself in the next line:\n"
+    descr += ">name1\nATCTC\n>name2\nATGTA\n>name3\nATGTC\n\n"
+    descr += "For the phylip, the first line is the number of sequences and the length of the sequences, with then name and sequence in the same line:\n"
+    descr += "3 5\nname1 ATCTC\nname2 ATGTA\nname3 ATGTC\n"
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=descr)
     parser.add_argument('-i', '--input', required=True, type=str, dest="input",
                         help="Input alignment file in fasta format")
     parser.add_argument('-o', '--output', required=True, type=str, dest="output",

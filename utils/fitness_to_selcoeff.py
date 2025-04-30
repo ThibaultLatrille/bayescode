@@ -71,7 +71,15 @@ def main(args):
 
 if __name__ == '__main__':
     # parse the arguments
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    descr = (
+        "A script to convert a fitness profile to selection coefficients.\n"
+        "The script will read the fitness profiles and the transitions file and write it in a new file with the selection coefficients.\n"
+        "--input_profiles: the fitness profiles obtained by running readnodemutsel or readaamutsel with the option --ss.\n"
+        "--input_transitions: the transitions file, which must contain the columns 'site', 'anc' and 'der'.\n"
+        "Selection coefficients are calculated as the log of the ratio of the fitness of the derived allele to the ancestral allele:\n"
+        "S = log(W(der)/W(anc))\n"
+    )
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=descr)
     parser.add_argument('--input_transitions', required=True, type=str, dest="input_transitions",
                         help="Input transitions file, must contain the columns 'site', 'anc' , and 'der'.\n"
                              "'site' is the 1-based index of the codon site, between 1 and n,"
@@ -79,7 +87,7 @@ if __name__ == '__main__':
                              "'anc' is the 3-letter ancestral codon.\n"
                              "'der' is the 3-letter derived codon.\n")
     parser.add_argument('--input_profiles', required=True, type=str, dest="input_profiles",
-                        help="Input fitness profiles file (obtained by running BayesCode).\n"
+                        help="Input fitness profiles file (obtained by running readnodemutsel or readaamutsel with the option --ss).\n"
                              "Contains n fitness profiles where n is the number of codons in the alignment.")
     parser.add_argument('--output', required=True, type=str, dest="output",
                         help="Output transition file also containing the columns 'anc_aa' (ancestral amino acid), "
